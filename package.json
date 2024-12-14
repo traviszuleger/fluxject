@@ -1,0 +1,45 @@
+{
+    "name": "fluxject",
+    "type": "module",
+    "version": "1.0.0-alpha7",
+    "description": "A strongly-typed dependency injection library.",
+    "scripts": {
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "build": "npm run clean && npm run build:source && npm run build:types",
+        "build:workflow": "npm run build:source && npm run build:types",
+        "build:source": "tsup",
+        "build:types": "tsc",
+        "clean": "del /S /Q .\\dist",
+        "prepare": "npm run test && npm run build"
+    },
+    "author": "Travis R. Zuleger",
+    "license": "MIT",
+    "devDependencies": {
+        "@types/node": "^22.10.2",
+        "crypto": "^1.0.1",
+        "tsup": "^8.3.5",
+        "typescript": "^5.7.2",
+        "vitest": "^2.1.8"
+    },
+    "module": "./dist/index.js",
+    "types": "./dist/types/index.d.ts",
+    "keywords": [
+        "type",
+        "type-safe",
+        "dependency",
+        "injection",
+        "di",
+        "transient",
+        "singleton",
+        "scoped",
+        "service",
+        "provider"
+    ],
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "types": "./dist/types/index.d.ts"
+        }
+    }
+}
