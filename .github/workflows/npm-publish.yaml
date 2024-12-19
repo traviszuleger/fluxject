@@ -25,9 +25,8 @@ jobs:
     - name: Publish new version to npm
       run: |
          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-         npm version --no-git-tag-version ${NEW_VERSION}
+         npm version --no-git-tag-version {{ git.ref_name }}
          npm install
          npm publish
       env:
          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
-         NEW_VERSION: ${{ git.ref_name }}
