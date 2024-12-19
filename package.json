@@ -9,11 +9,10 @@
     "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
-        "build": "npm run clean && npm run build:source && npm run build:types",
+        "build": "npm run build:source && npm run build:types",
         "build:workflow": "npm run build:source && npm run build:types",
         "build:source": "tsup",
         "build:types": "tsc",
-        "clean": "del /S /Q .\\dist",
         "prepare": "npm run test && npm run build"
     },
     "author": "Travis R. Zuleger",
