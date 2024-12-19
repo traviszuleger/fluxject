@@ -19,7 +19,6 @@ jobs:
         registry-url: 'https://registry.npmjs.org/'
     - name: Publish new version to npm
       run: npm version --git-tag-version false ${{ github.ref_name }}
-    - name: Add dev tag
-      run: npm dist-tag add fluxject@${{ github.ref_name }} dev
+      run: npm publish --provenance --tag dev
       env:
          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
