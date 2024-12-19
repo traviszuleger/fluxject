@@ -4,6 +4,8 @@ data/
 src/
 .github/
 issues/
+examples/
+out/
 
 .env
 .env-example
