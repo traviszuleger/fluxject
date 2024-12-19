@@ -19,13 +19,9 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org/'
       - run: npm ci
-        env:
-            NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   version:
     steps:
       - run: npm version ${GITHUB_REF##}
-        env:
-            NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
   publish:
     steps:
       - run: npm publish --provenance --tag dev
