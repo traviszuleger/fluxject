@@ -1,7 +1,10 @@
 {
     "name": "fluxject",
     "type": "module",
-    "version": "1.0.0-alpha7",
+    "repository": {
+        "url": "https://github.com/traviszuleger/fluxject"
+    },
+    "version": "1.0.0-rc3",
     "description": "A strongly-typed dependency injection library.",
     "scripts": {
         "test": "vitest run",

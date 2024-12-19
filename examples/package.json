@@ -1,0 +1,8 @@
+{
+    "type": "module",
+    "dependencies": {
+        "@kinshipjs/mysql2": "^0.2.2",
+        "base32-encode": "^2.0.0",
+        "fluxject": "file:.."
+    }
+}

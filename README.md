@@ -13,10 +13,10 @@ import { Container } from "fluxject";
 import { createDatabase } from "./my-database-provider.js";
 
 const container = Container.create()
-  .register(m => m.singleton("connectionString", process.env.CONNECTION_STRING))
-  .register(m => m.singleton("database", createDatabaseProvider))
-  .register(m => m.transient("log", createLogProvider))
-  .register(m => m.scoped("cache", VolatileCache));
+  .register(m => m.singleton({ connectionString: process.env.CONNECTION_STRING }))
+  .register(m => m.singleton({ database: createDatabaseProvider }))
+  .register(m => m.singleton({ log: createLogProvider }))
+  .register(m => m.scoped({ cache: VolatileCache }));
 
 const HostServiceProvider = container.prepare();
 
@@ -110,11 +110,11 @@ console.log(isFooInScope_before, isFooInScope_after);
 
 Here is an example of registering a `Singleton` lifetime service:
 
-```js
+```ts
 const container = Container.create()
-    .register(m => m.singleton("staticValue", 0))
-    .register(m => m.singleton("staticObject", (services: InferServiceProvider<typeof container, "staticObject">) => ({})))
-    .register(m => m.singleton("staticClassObject", SingletonService));
+    .register(m => m.singleton({ staticValue: 0 }))
+    .register(m => m.singleton({ staticObject: (services: InferServiceProvider<typeof container, "staticObject">) => ({}) }))
+    .register(m => m.singleton({ staticClassObject: SingletonService: }));
 
 class SingletonService {
     constructor(services: InferServiceProvider<typeof container, "staticClassObject">) {
@@ -125,7 +125,7 @@ class SingletonService {
 
 You can alter a singleton's properties (or value if the value passed was a constant value) at any time, and the state of that service (value or object) will persist so long as the `HostServiceProvider` object exists.
 
-```js
+```ts
 // ...
 const hostServiceProvider = container.prepare();
 hostServiceProvider.staticValue++;
@@ -140,11 +140,11 @@ assert(hostServiceProvider.staticValue === 1);
 
 Here is an example of instantiating a `Transient` lifetime service:  
 
-```js
+```ts
 const container = Container.create()
-    .register(m => m.transient("Value", 0))
-    .register(m => m.transient("Object", (services: InferServiceProvider<typeof container, "Object">) => ({})))
-    .register(m => m.transient("ClassObject", TransientService));
+    .register(m => m.transient({ Value: 0 }))
+    .register(m => m.transient({ Object: (services: InferServiceProvider<typeof container, "Object">) => ({}) }))
+    .register(m => m.transient({ ClassObject: TransientService }));
 
 class TransientService {
     constructor(services: InferServiceProvider<typeof container, "ClassObject">) {
