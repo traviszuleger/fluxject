@@ -17,6 +17,8 @@ jobs:
       with:
         node-version: '20.x'
         registry-url: 'https://registry.npmjs.org/'
+    - name: Clean Install
+      run: npm ci
     - name: Set new version
       run: npm version --git-tag-version false ${{ github.ref_name }}
     - name: Publish new version
