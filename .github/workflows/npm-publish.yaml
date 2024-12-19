@@ -10,14 +10,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org/'
-      - run: npm ci
-      - run: npm version ${{ github.ref_name }}
-      - run: npm publish --provenance --tag dev
-      - run: npm dist-tag add dev-latest
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    - name: Checkout master
+      uses: actions/checkout@master
+    - name: Bump version and push tag
+      uses: anothrNick/github-tag-action@1.7.1
+      env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      id: bump_version
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org/'
+    - name: Publish new version to npm
+      run: |
+         echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+         npm version --no-git-tag-version ${NEW_VERSION}
+         npm install
+         npm publish
+      env:
+         NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+         NEW_VERSION: ${{ git.ref_name }}
