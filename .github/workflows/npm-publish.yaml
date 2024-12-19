@@ -19,11 +19,7 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org/'
       - run: npm ci
-  version:
-    steps:
       - run: npm version ${GITHUB_REF##}
-  publish:
-    steps:
       - run: npm publish --provenance --tag dev
       - run: npm dist-tag add dev-latest
         env:
