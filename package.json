@@ -4,7 +4,7 @@
     "repository": {
         "url": "https://github.com/traviszuleger/fluxject"
     },
-    "version": "1.0.0-rc5",
+    "version": "1.0.1",
     "description": "A strongly-typed dependency injection library.",
     "scripts": {
         "test": "vitest run",
