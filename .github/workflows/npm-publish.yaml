@@ -5,25 +5,20 @@ name: 'Fluxject Publish devBuild Package'
 
 on:
   push:
-    tags: ['*.*.*-devBuild-*', '*.*.*-dev-*']
+    tags: ['*.*.*-devBuild-*']
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout master
       uses: actions/checkout@master
-    - name: Bump version and push tag
-      uses: anothrNick/github-tag-action@1.7.1
-      env:
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      id: bump_version
     - name: Use Node.js 20.x
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
         registry-url: 'https://registry.npmjs.org/'
     - name: Publish new version to npm
-      run: npm version --git-tag-version false {{ git.ref_name }}
+      run: npm version --git-tag-version false ${{ git.ref_name }}
     - name: Add dev tag
       run: npm dist-tag add fluxject@${{ git.ref_name }} dev
       env:
