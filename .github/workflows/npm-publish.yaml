@@ -5,7 +5,7 @@ name: 'fluxject npm package'
 
 on:
   push:
-    tags: [devBuild-*']
+    tags: ['devBuild-*']
 jobs:
   build:
     runs-on: ubuntu-latest
