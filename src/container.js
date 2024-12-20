@@ -1,6 +1,6 @@
 //@ts-check
 /** @import { Registration } from "./registration.js" */
-/** @import { HostServiceProvider, InferValueFromRegistration, OnlyRegistrationsOfLifetime, Resolved } from "./types.js" */
+/** @import { HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved } from "./types.js" */
 import { RegistrationProvider } from "./registration.js";
 import { Lifetime } from "./types.js"
 
@@ -205,14 +205,7 @@ export class Container {
 
 /**
  * Gets the `ScopedServiceProvider` type associated with `TContainer`.
- * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
+ * @template {Container} TContainer
  * The container to infer the service provider from
- * @typedef {{[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton"|"Transient">]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>} & { createScope: () => ScopedServiceProvider<TRegistrationMap> }} HostServiceProvider
- */
-
-/**
- * Gets the `ScopedServiceProvider` type associated with `TContainer`.
- * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
- * The container to infer the service provider from
- * @typedef {{[K in keyof TRegistrationMap]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>}} ScopedServiceProvider
+ * @typedef {{[K in keyof InferRegistrationsFromContainer<TContainer>]: Resolved<InferValueFromRegistration<InferRegistrationsFromContainer<TContainer>[K]>>}} ScopedServiceProvider
  */
