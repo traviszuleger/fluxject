@@ -1,9 +1,11 @@
 //@ts-check
 import { suite, test, expect } from "vitest";
 import { container } from "./mocks.js";
-import { FLUXJECT_ID } from "../src/index.js";
+import { FLUXJECT_ID } from "../src/types.js";
 
-const hostProvider = container.prepare();
+const hostProvider = container.prepare({
+    enablePredefinedProperties: true
+});
 suite(`Scoped`, () => {
     const provider = hostProvider.createScope();
 
