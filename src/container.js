@@ -6,6 +6,11 @@ import { RegistrationProvider } from "./registration.js";
 import { FLUXJECT_ID, FLUXJECT_UPTIME, Lifetime } from "./types.js"
 import { TimeSpan } from "unitspan";
 
+export {
+    FLUXJECT_ID,
+    FLUXJECT_UPTIME,
+};
+
 /**
  * Class that manages injected services accordingly.
  * @template {Record<string, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
