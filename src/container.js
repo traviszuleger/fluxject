@@ -267,12 +267,6 @@ export class Container {
  */
 
 /**
- * @typedef AdvancedConfig
- * @prop {boolean} enableFluxjectProperty_Id
- * @prop {boolean} enableFluxjectProperty_Uptime
- */
-
-/**
  * Gets the `ScopedServiceProvider` type associated with `TContainer`.
  * @template {Container} TContainer
  * The container to infer the service provider from
