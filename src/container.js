@@ -9,6 +9,7 @@ import { TimeSpan } from "unitspan";
 export {
     FLUXJECT_ID,
     FLUXJECT_UPTIME,
+    FLUXJECT_LIFETIME
 };
 
 /**

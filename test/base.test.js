@@ -1,7 +1,7 @@
 //@ts-check
 import { suite, test, expect } from "vitest";
 import { container } from "./mocks.js";
-import { FLUXJECT_ID, FLUXJECT_LIFETIME, FLUXJECT_UPTIME } from "../src/types.js";
+import { FLUXJECT_ID, FLUXJECT_LIFETIME, FLUXJECT_UPTIME } from "../src/container.js";
 
 suite(`Fluxject Properties`, () => {
     test(`[enablePredefinedProperties] option is true`, () => {
