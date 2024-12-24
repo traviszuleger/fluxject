@@ -2,6 +2,19 @@
 /** @import { Container } from "./container.js" */
 /** @import { Registration } from "./registration.js" */
 
+import { TimeSpan } from "unitspan";
+
+/** @type {unique symbol} */
+export const FLUXJECT_ID = Symbol("fluxject-id");
+/** @type {unique symbol} */
+export const FLUXJECT_UPTIME = Symbol("fluxject-uptime");
+
+/**
+ * @typedef { { [K in typeof FLUXJECT_ID]: `${string}-${string}-${string}-${string}-${string}` } 
+ *   & { [K in typeof FLUXJECT_UPTIME]: TimeSpan }
+ * } FluxjectProperties
+ */
+
 /**
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
  * @typedef {{[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton"|"Transient">]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>} & { createScope: () => ScopedServiceProvider<TRegistrationMap> }} HostServiceProvider
@@ -144,9 +157,9 @@
 * Infers the resolved type from the given registration type.
 * @template T
 * @typedef {T extends ClassType
-* ? ResolvedClassType<T> 
+* ? ResolvedClassType<T> & FluxjectProperties
 * : T extends FactoryType
-* ? ResolvedFactoryType<T>
+* ? ResolvedFactoryType<T> & FluxjectProperties
 * : T} Resolved
 */
 
