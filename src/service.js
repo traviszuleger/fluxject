@@ -2,11 +2,6 @@
 /** @import { Container } from "./container.js" */
 /** @import { InferRegistrationsFromContainer, InferServiceProvider } from "./types.js" */
 
-import { randomUUID } from "crypto";
-
-/** @type {unique symbol} */
-export const FLUXJECT_ID = Symbol("fluxject-id");
-
 /**
  * Basic service that sets a unique uuid as a protected member and all available services from `TContainer` (excluding this service)
  * ```ts
@@ -30,8 +25,6 @@ export const FLUXJECT_ID = Symbol("fluxject-id");
  */
 export class Service {
     /** @protected */
-    [FLUXJECT_ID] = randomUUID();
-    /** @protected */
     services;
 
     /**
@@ -39,7 +32,6 @@ export class Service {
      */
     constructor(services) {
         this.services = services;
-        Object.defineProperty(this, FLUXJECT_ID, { writable: false });
     }
 }
 

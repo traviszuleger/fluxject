@@ -1,10 +1,19 @@
 //@ts-check
 /** @import { Registration } from "./registration.js" */
-/** @import { HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved } from "./types.js" */
+/** @import { HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved, Widen } from "./types.js" */
+import { randomUUID } from "crypto";
 import { RegistrationProvider } from "./registration.js";
-import { Lifetime } from "./types.js"
+import { FLUXJECT_ID, FLUXJECT_LIFETIME, FLUXJECT_UPTIME, FluxjectProperties, Lifetime } from "./types.js"
+import { TimeSpan } from "unitspan";
+
+export {
+    FLUXJECT_ID,
+    FLUXJECT_UPTIME,
+    FLUXJECT_LIFETIME
+};
 
 /**
+ * Class that manages injected services accordingly.
  * @template {Record<string, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
  */
 export class Container {
@@ -12,12 +21,14 @@ export class Container {
     #registrations;
 
     /**
+     * Create a new Container
      * @param {Partial<ContainerConfig>} config
      * @returns 
      */
     static create(config={}) {
         const containerConfig = {
             strict: true,
+            enablePredefinedProperties: false,
             ...config
         };
         return new Container(containerConfig, {});
@@ -60,31 +71,38 @@ export class Container {
      * Type of the new registration being added
      * @param {(registrationProvider: RegistrationProvider) => TNewRegistrations} callback
      * Callback function that is used to reflect and setup a new Registration.
-     * @returns {Container<TRegistrationMap & TNewRegistrations>}
+     * @returns {Container<Widen<TRegistrationMap & TNewRegistrations>>}
      * A clone of this Container with the newly updated type reflected by the added Registration.
      */
     register(callback) {
         const registrations = callback(new RegistrationProvider());
-        return new Container(this.#config, {
+        const container = /** @type {any} */ (new Container(this.#config, {
             ...this.#registrations,
             ...registrations
-        });
+        }));
+        return container;
     }
     
     /**
+     * @param {Partial<ContainerConfig>} config
      * Prepare the container for consumption
      * @returns {HostServiceProvider<TRegistrationMap>}
      * Fully prepared Service Container containing properties for all registered services and a function to create scope.
      */
-    prepare() {
+    prepare(config={}) {
+        const container = new Container({
+            ...this.#config,
+            ...config,
+        }, this.#registrations);
         const singletons = {};
         for(const key in this.#registrations) {
             const registration = this.#registrations[key];
             if(registration.type === Lifetime.Singleton) {
-                singletons[registration.name] = registration.instantiate(this.#createHostServiceProvider(singletons));
+                singletons[registration.name] = registration.instantiate(container.#createHostServiceProvider(singletons));
+                container.#defineFluxjectProperties(singletons[registration.name], registration);
             }
         }
-        return this.#createHostServiceProvider(singletons);
+        return container.#createHostServiceProvider(singletons);
     }
 
     /**
@@ -107,7 +125,9 @@ export class Container {
                         return singletons[p];
                     }
                     if(this.#registrations[p].type === Lifetime.Transient) {
-                        return this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                        const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                        this.#defineFluxjectProperties(obj, this.#registrations[p]);
+                        return obj;
                     }
                 }
                 return undefined;
@@ -161,13 +181,16 @@ export class Container {
                 }
                 if(this.#registrations[p].type === Lifetime.Scoped) {
                     t[p] = this.#registrations[p].instantiate(scopedServiceProvider);
+                    this.#defineFluxjectProperties(t[p], this.#registrations[p]);
                     return t[p];
                 }
                 if(this.#registrations[p].type === Lifetime.Singleton) {
                     return singletons[p];
                 }
                 if(this.#registrations[p].type === Lifetime.Transient) {
-                    return this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                    const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                    this.#defineFluxjectProperties(obj, this.#registrations[p]);
+                    return obj;
                 }
                 return undefined;
             },
@@ -193,6 +216,43 @@ export class Container {
         });
         return scopedServiceProvider;
     }
+
+    /**
+     * @param {any} obj 
+     * @param {Registration<any,any,any>} registration
+     */
+    #defineFluxjectProperties(obj, registration) {
+        if(typeof obj !== "object") {
+            return;
+        }
+        if(!this.#config.enablePredefinedProperties) {
+            const properties = Object.fromEntries(Object.entries(FluxjectProperties).map(([k,v]) => [FluxjectProperties[k],
+                {
+                    get: () => {
+                        throw new Error(`Cannot get [${String(FluxjectProperties[k])}] as the [enablePredefinedProperties] option is set to false.`);
+                    }
+                }
+            ]));
+            Object.defineProperties(obj, properties);
+            return;
+        }
+        const timeAtDefinition = Date.now();
+        Object.defineProperties(obj, {
+            [FLUXJECT_ID]: {
+                writable: false,
+                value: randomUUID()
+            },
+            [FLUXJECT_UPTIME]: {
+                get: () => {
+                    return TimeSpan.fromMilliseconds(Date.now() - timeAtDefinition);
+                }
+            },
+            [FLUXJECT_LIFETIME]: {
+                writable: false,
+                value: registration.type
+            }
+        })
+    }
 }
 
 /**
@@ -201,6 +261,9 @@ export class Container {
  * @prop {boolean} strict
  * When true, various correctness checks are enabled, including the following:
  *   - `Singleton` timetime registered services are not editable.
+ * @prop {boolean} enablePredefinedProperties
+ * When true, properties like {@link FLUXJECT_ID} and other unique symbol properties will be
+ * defined on `object` type services. (default: false) 
  */
 
 /**
