@@ -8,6 +8,14 @@ import { TimeSpan } from "unitspan";
 export const FLUXJECT_ID = Symbol("fluxject-id");
 /** @type {unique symbol} */
 export const FLUXJECT_UPTIME = Symbol("fluxject-uptime");
+/** @type {unique symbol} */
+export const FLUXJECT_LIFETIME = Symbol("fluxject-lifetime");
+
+export const FluxjectProperties = {
+    Id: FLUXJECT_ID,
+    Uptime: FLUXJECT_UPTIME,
+    Lifetime: FLUXJECT_LIFETIME
+};
 
 /**
  * @typedef { { [K in typeof FLUXJECT_ID]: `${string}-${string}-${string}-${string}-${string}` } 

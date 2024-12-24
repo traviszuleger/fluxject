@@ -3,7 +3,7 @@
 /** @import { HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved, Widen } from "./types.js" */
 import { randomUUID } from "crypto";
 import { RegistrationProvider } from "./registration.js";
-import { FLUXJECT_ID, FLUXJECT_UPTIME, Lifetime } from "./types.js"
+import { FLUXJECT_ID, FLUXJECT_LIFETIME, FLUXJECT_UPTIME, FluxjectProperties, Lifetime } from "./types.js"
 import { TimeSpan } from "unitspan";
 
 export {
@@ -98,7 +98,7 @@ export class Container {
             const registration = this.#registrations[key];
             if(registration.type === Lifetime.Singleton) {
                 singletons[registration.name] = registration.instantiate(container.#createHostServiceProvider(singletons));
-                container.#defineFluxjectProperties(singletons[registration.name]);
+                container.#defineFluxjectProperties(singletons[registration.name], registration);
             }
         }
         return container.#createHostServiceProvider(singletons);
@@ -108,9 +108,7 @@ export class Container {
      * @param {*} singletons 
      */
     #createHostServiceProvider(singletons) {
-        const hostServiceProvider = new Proxy(/** @type {any} */ ({
-            [FLUXJECT_ID]: randomUUID()
-        }), {
+        const hostServiceProvider = new Proxy(/** @type {any} */ ({}), {
             get: (t,p,r) => {
                 if(typeof p === "symbol") {
                     throw new Error(`Property, "${String(p)}", must be of type "String".`);
@@ -127,7 +125,7 @@ export class Container {
                     }
                     if(this.#registrations[p].type === Lifetime.Transient) {
                         const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
-                        this.#defineFluxjectProperties(obj);
+                        this.#defineFluxjectProperties(obj, this.#registrations[p]);
                         return obj;
                     }
                 }
@@ -182,7 +180,7 @@ export class Container {
                 }
                 if(this.#registrations[p].type === Lifetime.Scoped) {
                     t[p] = this.#registrations[p].instantiate(scopedServiceProvider);
-                    this.#defineFluxjectProperties(t[p]);
+                    this.#defineFluxjectProperties(t[p], this.#registrations[p]);
                     return t[p];
                 }
                 if(this.#registrations[p].type === Lifetime.Singleton) {
@@ -190,7 +188,7 @@ export class Container {
                 }
                 if(this.#registrations[p].type === Lifetime.Transient) {
                     const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
-                    this.#defineFluxjectProperties(obj);
+                    this.#defineFluxjectProperties(obj, this.#registrations[p]);
                     return obj;
                 }
                 return undefined;
@@ -220,9 +218,21 @@ export class Container {
 
     /**
      * @param {any} obj 
+     * @param {Registration<any,any,any>} registration
      */
-    #defineFluxjectProperties(obj) {
-        if(!this.#config.enablePredefinedProperties || typeof obj !== "object") {
+    #defineFluxjectProperties(obj, registration) {
+        if(typeof obj !== "object") {
+            return;
+        }
+        if(!this.#config.enablePredefinedProperties) {
+            const properties = Object.fromEntries(Object.entries(FluxjectProperties).map(([k,v]) => [FluxjectProperties[k],
+                {
+                    get: () => {
+                        throw new Error(`Cannot get [${String(FluxjectProperties[k])}] as the [enablePredefinedProperties] option is set to false.`);
+                    }
+                }
+            ]));
+            Object.defineProperties(obj, properties);
             return;
         }
         const timeAtDefinition = Date.now();
@@ -235,6 +245,10 @@ export class Container {
                 get: () => {
                     return TimeSpan.fromMilliseconds(Date.now() - timeAtDefinition);
                 }
+            },
+            [FLUXJECT_LIFETIME]: {
+                writable: false,
+                value: registration.type
             }
         })
     }

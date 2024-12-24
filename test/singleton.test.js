@@ -20,7 +20,9 @@ suite(`Singleton`, () => {
     });
 
     test(`Singleton should NOT maintain requests across preparations.`, () => {
-        const provider2 = container.prepare();
+        const provider2 = container.prepare({
+            enablePredefinedProperties: true
+        });
         expect(provider.Secrets[FLUXJECT_ID]).not.toBe(provider2.Secrets[FLUXJECT_ID]);
     });
 
