@@ -102,6 +102,54 @@ console.log(isFooInScope_before, isFooInScope_after);
 // will print "false true"
 ```
 
+#### Async
+
+As of version 1.1, you can now declare factory types and constant types on `Scoped` services as Promises, to support asynchronous initialization.
+
+To accomplish having an asynchronous `Scoped` service, you must `await` the `[createScope()]` function on your host service provider.  
+
+The return type of the `[createScope()]` function will be the same as if you didn't have any Promise scoped services, so the returned `ScopedServiceProvider` will behave in the same manner, as long as it is awaited. As expected, if it is not awaited, a `Promise` is returned that will yield the expected `ScopedServiceProvider`.
+
+See this example:
+
+```ts
+function myNonAsyncService() {
+    // ...
+    return {
+        test: () => console.log(`Test passed!`);
+    }
+}
+
+const nonAsyncContainer = Container
+    .create()
+    .scoped({ myNonAsyncService });
+
+const hsp = nonAsyncContainer.prepare();
+const ssp = hsp.createScope();
+
+ssp.myNonAsyncService.test(); // Will print `Test passed!` as expected
+
+async function myAsyncService() {
+    // ...
+    return {
+        test: () => console.log(`Test passed!`);
+    }
+}
+
+const asyncContainer = Container
+    .create()
+    .scoped({ myAsyncService });
+
+// do not have to await [prepare()] as the return type of prepare is only a promise if a Singleton instantiator returns a Promise
+const hsp = asyncContainer.prepare(); 
+const unawaitedSSP = hsp.createScope(); // however...
+
+unawaitedSSP.myAsyncService.test(); // Will fail with an error, stating that `test` is not a function (and is undefined instead)
+// INSTEAD do this
+const awaitedSSP = await hsp.createScope();
+awaitedSSP.myAsyncService.test(); // Will print `Test passed!` as expected
+```
+
 ### Singleton
 
 `Singleton` lifetime services will last as long as the application's lifetime, meaning that once you call `.prepare()`, the singleton service will be instantiated and will remain as such until your programs quits (or, technically, once the return value from `.prepare()` leaves scope)
@@ -130,6 +178,20 @@ You can alter a singleton's properties (or value if the value passed was a const
 const hostServiceProvider = container.prepare();
 hostServiceProvider.staticValue++;
 assert(hostServiceProvider.staticValue === 1);
+```
+
+#### Async
+
+As of version 1.1, you can now declare factory types and constant types on `Singleton` services as Promises, to support asynchronous initialization.
+
+To accomplish having an asynchronous `Singleton` service, you must `await` the `[prepare()]` function on your configured container.
+
+The return type of the `[prepare()]` function will be the same as if you didn't have any Promise singleton services, so the returned `HostServiceProvider` will behave in the same manner, as long as it is awaited. As expected, if it is not awaited, a `Promise` is returned that will yield the expected `HostServiceProvider`.
+
+See this example:
+
+```ts
+
 ```
 
 ### Transient
@@ -172,4 +234,28 @@ const { TransientService } = hostProvider;
 const TransientService = hostProvider.TransientService;
 
 // now, TransientService can be used throughout the rest of its own lifetime without it being re-instantiated.
+```
+
+#### Async
+
+Unlike the aforementioned `Singleton` and `Scoped` services that handle asynchronous functionality for you, `Transient` services cannot be pre-awaited using the `[prepare()]` or `[createScope()]` functions, since `Transient` services are initialized on demand. Therefore, if you want to register an asynchronous `Transient` service, you must await the requested service before using it.
+
+See this example:
+
+```ts
+async function myAsyncService() {
+    // ...
+    return {
+        test: () => console.log(`Test passed!`);
+    }
+}
+
+const container = Container
+    .create()
+    .register(m => m.transient({ myAsyncService }));
+
+const hsp = container.prepare(); // do not have to use `await`, as there are no asynchronous `Singleton` services.
+hsp.myAsyncService.test(); // Will fail with an error, stating that `test` is not a function (and is undefined instead)
+// INSTEAD do this
+(await hsp.myAsyncService).test();
 ```

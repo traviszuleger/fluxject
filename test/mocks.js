@@ -1,6 +1,8 @@
 //@ts-check
+/** @import { InferServiceProvider } from "../src/types.js" */
 import { Container } from "../src/container.js";
 import { Service } from "../src/service.js";
+import { isConstructor } from "../src/util.js";
 
 /**
  * @typedef {typeof container} ContainerType
@@ -87,13 +89,26 @@ class RequestDetail extends Service {
 
 }
 
+/**
+ * 
+ * @param {InferServiceProvider<ContainerType, "mySingletonAsyncService"|"myScopedAsyncService"|"myTransientAsyncService">} services 
+ */
+async function mySingletonAsyncService(services) {
+    return {
+        test: 1
+    }
+}
+
 export const container = Container
     .create()
+    .register(m => m.singleton({ mySingletonAsyncService }))
     .register(m => m.singleton({ isDevMode: true }))
     .register(m => m.singleton({ Secrets }))
     .register(m => m.singleton({ RoutesController }))
     .register(m => m.singleton({ DatabaseProvider }))
     .register(m => m.transient({ numRequests: 0 }))
     .register(m => m.transient({ AuthProvider }))
+    .register(m => m.transient({ myTransientAsyncService: mySingletonAsyncService }))
     .register(m => m.scoped({ RequestDetail }))
-    .register(m => m.scoped({ x: 0}));
+    .register(m => m.scoped({ myScopedAsyncService: mySingletonAsyncService}))
+    .register(m => m.scoped({ x: 0 }));

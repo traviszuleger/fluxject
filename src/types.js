@@ -18,6 +18,7 @@ export const FluxjectProperties = {
 };
 
 /**
+ * Various hidden symbol properties that describe the Service being used.
  * @typedef { { [K in typeof FLUXJECT_ID]: `${string}-${string}-${string}-${string}-${string}` } 
  *   & { [K in typeof FLUXJECT_UPTIME]: TimeSpan }
  * } FluxjectProperties
@@ -25,12 +26,53 @@ export const FluxjectProperties = {
 
 /**
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
- * @typedef {{[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton"|"Transient">]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>} & { createScope: () => ScopedServiceProvider<TRegistrationMap> }} HostServiceProvider
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef FluxjectCreateScopeObject
+ * @prop {() => AnyPromiseScopes<TRegistrationMap> extends never
+ *   ? ScopedServiceProvider<TRegistrationMap>
+ *   : Promise<ScopedServiceProvider<TRegistrationMap>> 
+ * } createScope
+ * Initialize a new level of scope from the host service provider.
  */
 
 /**
+ * Type representing the `HostServiceProvider` that is intended to be used throughout the lifetime of the application.
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
- * @typedef {{[K in keyof TRegistrationMap]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>}} ScopedServiceProvider
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef {Widen<FluxjectCreateScopeObject<TRegistrationMap>
+ *   & {[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton">]: Awaited<Resolved<InferValueFromRegistration<TRegistrationMap[K]>>>}
+ *   & {[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Transient">]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>}>
+ * } HostServiceProvider
+ */
+
+/**
+ * Type representing the `ScopedServiceProvider` that is returned from the `[createScope()]` function provided in the {@link HostServiceProvider}.
+ * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef {Widen<{[K in keyof TRegistrationMap]: Awaited<Resolved<InferValueFromRegistration<TRegistrationMap[K]>>>}>} ScopedServiceProvider
+ */
+
+/**
+ * Returns `true` if any registration of the Singleton lifetime in `TRegistrationMap` has an instantiation function that returns a Promise.
+ * Otherwise, returns `never`.
+ * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef {Extract<InferValuesFromRegistrationMap<OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton">>, (...args: any) => Promise> extends never ? never : true} AnyPromiseSingletons
+ */
+
+/**
+ * Returns `true` if any registration of the Scoped lifetime in `TRegistrationMap` has an instantiation function that returns a Promise.
+ * Otherwise, returns `never`.
+ * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef {Extract<InferValuesFromRegistrationMap<OnlyRegistrationsOfLifetime<TRegistrationMap, "Scoped">>, (...args: any) => Promise> extends never ? never : true} AnyPromiseScopes
+ */
+
+/**
+ * Infer all values from `TRegistrationMap`, returning all the value types as a union type.
+ * @template {Record<String, Registration<any, string, Lifetime>>} TRegistrationMap
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef {InferValueFromRegistration<TRegistrationMap[keyof TRegistrationMap]>} InferValuesFromRegistrationMap
  */
 
 /**
@@ -69,7 +111,7 @@ export const FluxjectProperties = {
  * Registrations to filter from.
  * @template {Lifetime} TLifetime
  * Lifetime type that should be
- * @typedef {{[K in keyof PickValues<{[K in keyof TRegistrations]: InferLifetimeFromRegistration<TRegistrations[K]>}, TLifetime>]: Resolved<InferValueFromRegistration<TRegistrations[K]>>}} OnlyRegistrationsOfLifetime
+ * @typedef {{[K in keyof PickValues<{[K in keyof TRegistrations]: InferLifetimeFromRegistration<TRegistrations[K]>}, TLifetime>]: TRegistrations[K]}} OnlyRegistrationsOfLifetime
  */
 
 /**
@@ -115,7 +157,7 @@ export const FluxjectProperties = {
 
 /**
 * Expected sub-type for factory-like instantiators.
-* @typedef {(...args: any) => Exclude<any, PromiseLike>} FactoryType
+* @typedef {(...args: any) => any|Promise<any>} FactoryType
 */
 
 /**
@@ -165,9 +207,9 @@ export const FluxjectProperties = {
 * Infers the resolved type from the given registration type.
 * @template T
 * @typedef {T extends ClassType
-* ? ResolvedClassType<T> & FluxjectProperties
+* ? ResolvedClassType<T>
 * : T extends FactoryType
-* ? ResolvedFactoryType<T> & FluxjectProperties
+* ? ResolvedFactoryType<T>
 * : T} Resolved
 */
 

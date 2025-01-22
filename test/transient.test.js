@@ -2,9 +2,8 @@
 import { suite, test, expect } from "vitest";
 import { container } from "./mocks.js";
 
+const provider = await container.prepare();
 suite(`Transient`, () => {
-    const provider = container.prepare();
-
     test(`Transient does not maintain state across multiple resolutions.`, () => {
         provider.AuthProvider.validateUser(0);
         expect(provider.AuthProvider.validations).toBe(0);

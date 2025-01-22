@@ -1,6 +1,6 @@
 //@ts-check
 /** @import { Registration } from "./registration.js" */
-/** @import { HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved, Widen } from "./types.js" */
+/** @import { AnyPromiseSingletons, HostServiceProvider, InferRegistrationsFromContainer, InferValueFromRegistration, Resolved, Widen } from "./types.js" */
 import { randomUUID } from "crypto";
 import { RegistrationProvider } from "./registration.js";
 import { FLUXJECT_ID, FLUXJECT_LIFETIME, FLUXJECT_UPTIME, FluxjectProperties, Lifetime } from "./types.js"
@@ -84,12 +84,16 @@ export class Container {
     }
     
     /**
-     * @param {Partial<ContainerConfig>} config
      * Prepare the container for consumption
-     * @returns {HostServiceProvider<TRegistrationMap>}
+     * @param {Partial<ContainerConfig>} config
+     * @returns {AnyPromiseSingletons<TRegistrationMap> extends never
+     * ? HostServiceProvider<TRegistrationMap> 
+     * : Promise<HostServiceProvider<TRegistrationMap>>}
      * Fully prepared Service Container containing properties for all registered services and a function to create scope.
      */
     prepare(config={}) {
+        /** @type {Promise<any>|undefined} */
+        let promise = undefined;
         const container = new Container({
             ...this.#config,
             ...config,
@@ -97,10 +101,31 @@ export class Container {
         const singletons = {};
         for(const key in this.#registrations) {
             const registration = this.#registrations[key];
-            if(registration.type === Lifetime.Singleton) {
-                singletons[registration.name] = registration.instantiate(container.#createHostServiceProvider(singletons));
-                container.#defineFluxjectProperties(singletons[registration.name], registration);
+            if(registration.type !== Lifetime.Singleton) {
+                continue;
             }
+            const maybePromise = registration.instantiate(container.#createHostServiceProvider(singletons));
+            if(typeof maybePromise === "object" && "then" in maybePromise) {
+                if(promise) {
+                    promise = promise.then(maybePromise).then(val => {
+                        container.#defineFluxjectProperties(val, registration);
+                        singletons[registration.name] = val;
+                    });
+                }
+                else {
+                    promise = maybePromise.then(val => {
+                        container.#defineFluxjectProperties(val, registration);
+                        singletons[registration.name] = val;
+                    });
+                }
+            }
+            else {
+                container.#defineFluxjectProperties(maybePromise, registration);
+                singletons[registration.name] = maybePromise;
+            }
+        }
+        if(promise) {
+            return /** @type {any} */ (promise.then(() => container.#createHostServiceProvider(singletons)));
         }
         return container.#createHostServiceProvider(singletons);
     }
@@ -115,7 +140,7 @@ export class Container {
                     throw new Error(`Property, "${String(p)}", must be of type "String".`);
                 }
                 if(p === "createScope") {
-                    return () => this.#createScopedServiceProvider(singletons)
+                    return () => this.#createScopedServiceProvider(singletons);
                 }
                 if(p in this.#registrations) {
                     if(this.#registrations[p].type === Lifetime.Scoped) {
@@ -125,9 +150,17 @@ export class Container {
                         return singletons[p];
                     }
                     if(this.#registrations[p].type === Lifetime.Transient) {
-                        const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
-                        this.#defineFluxjectProperties(obj, this.#registrations[p]);
-                        return obj;
+                        const maybePromise = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                        if(typeof maybePromise === "object" && "then" in maybePromise) {
+                            maybePromise.then(obj => {
+                                this.#defineFluxjectProperties(obj, this.#registrations[p]);
+                                return obj;
+                            });
+                        }
+                        else {
+                            this.#defineFluxjectProperties(maybePromise, this.#registrations[p]);
+                        }
+                        return maybePromise;
                     }
                 }
                 return undefined;
@@ -168,7 +201,37 @@ export class Container {
      * @param {*} singletons 
      */
     #createScopedServiceProvider(singletons) {
-        const scopedServiceProvider = new Proxy({}, {
+        /** @type {Promise<any>|undefined} */
+        let promise = undefined;
+        const obj = {
+            ...singletons
+        };
+        for(const key in this.#registrations) {
+            const registration = this.#registrations[key];
+            if(registration.type !== Lifetime.Scoped) {
+                continue;
+            }
+            const maybePromise = registration.instantiate(this.#createHostServiceProvider(singletons));
+            if(typeof maybePromise === "object" && "then" in maybePromise) {
+                if(promise) {
+                    promise = promise.then(maybePromise).then(val => {
+                        this.#defineFluxjectProperties(val, registration);
+                        obj[registration.name] = val;
+                    })
+                }
+                else {
+                    promise = maybePromise.then(val => {
+                        this.#defineFluxjectProperties(val, registration);
+                        obj[registration.name] = val;
+                    });
+                }
+            }
+            else {
+                this.#defineFluxjectProperties(maybePromise, registration);
+                obj[registration.name] = maybePromise;
+            }
+        }
+        const scopedServiceProvider = new Proxy(obj, {
             get: (t,p,r) => {
                 if(p in t) {
                     return t[p];
@@ -179,18 +242,19 @@ export class Container {
                 if(!(p in this.#registrations)) {
                     return undefined;
                 }
-                if(this.#registrations[p].type === Lifetime.Scoped) {
-                    t[p] = this.#registrations[p].instantiate(scopedServiceProvider);
-                    this.#defineFluxjectProperties(t[p], this.#registrations[p]);
-                    return t[p];
-                }
                 if(this.#registrations[p].type === Lifetime.Singleton) {
                     return singletons[p];
                 }
-                if(this.#registrations[p].type === Lifetime.Transient) {
-                    const obj = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
-                    this.#defineFluxjectProperties(obj, this.#registrations[p]);
-                    return obj;
+                else if(this.#registrations[p].type === Lifetime.Transient) {
+                    const maybePromise = this.#registrations[p].instantiate(this.#createHostServiceProvider(singletons));
+                    if(typeof maybePromise === "object" && "then" in maybePromise) {
+                        return maybePromise.then(val => {
+                            this.#defineFluxjectProperties(val, this.#registrations[p]);
+                            return val;
+                        });
+                    }
+                    this.#defineFluxjectProperties(maybePromise, this.#registrations[p]);
+                    return maybePromise;
                 }
                 return undefined;
             },
@@ -214,6 +278,10 @@ export class Container {
                 return true;
             }
         });
+
+        if(promise) {
+            return promise.then(() => scopedServiceProvider);
+        }
         return scopedServiceProvider;
     }
 
