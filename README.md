@@ -13,8 +13,11 @@ __Please submit bugs and feature requests as an issue on the GitHub page.__
     - [Singleton Services](#singleton)
     - [Transient Services](#transient)
 - [Asynchronous Services](#async)
-- [Disposal of Services](#dispose)
     - [Type Safety](#type-safety)
+    - [Examples](#examples)
+- [Disposal of Services](#dispose)
+    - [Type Safety](#type-safety-1)
+    - [Examples](#examples-1)
 
 ## Example
 

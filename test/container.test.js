@@ -267,15 +267,15 @@ describe('async services', () => {
 
 describe('dispose services', () => {
     describe('singletons', () => {
-        it('should dispose synchronous [Symbol.dispose] singleton services', async () => {
+        it('should synchronously dispose singleton services (Symbol.dispose)', () => {
             let disposed = false;
 
-            const asyncService = () => ({
+            const syncService = () => ({
                 [Symbol.dispose]: () => disposed = true
             });
 
             const container = Container.create()
-                .register(m => m.singleton({ test: asyncService }));
+                .register(m => m.singleton({ test: syncService }));
 
             const provider = container.prepare();
             provider.dispose();
@@ -283,33 +283,83 @@ describe('dispose services', () => {
             expect(disposed).toBe(true);
         });
 
-        it('should dispose asynchronous [Symbol.asyncDispose] singleton services', async () => {
+        it('should asynchronously dispose singleton services (Symbol.asyncDispose)', async () => {
             let disposed = false;
 
-            const asyncService = () => ({
+            const syncService = () => ({
                 [Symbol.asyncDispose]: async () => disposed = true
             });
 
             const container = Container.create()
-                .register(m => m.singleton({ test: asyncService }));
+                .register(m => m.singleton({ test: syncService }));
 
             const provider = container.prepare();
             await provider.dispose();
 
             expect(disposed).toBe(true);
         });
+
+        it('should synchronously dispose multiple singleton services (Symbol.dispose)', () => {
+            let disposed1 = false;
+            let disposed2 = false;
+
+            const syncService1 = () => ({
+                [Symbol.dispose]: () => disposed1 = true
+            });
+
+            const syncService2 = () => ({
+                [Symbol.dispose]: () => disposed2 = true
+            });
+
+            const container = Container.create()
+                .register(m => m.singleton({ 
+                    test1: syncService1,
+                    test2: syncService2
+                }));
+
+            const provider = container.prepare();
+            provider.dispose();
+
+            expect(disposed1).toBe(true);
+            expect(disposed2).toBe(true);
+        });
+
+        it('should asynchronously dispose multiple singleton services (Symbol.asyncDispose)', async () => {
+            let disposed1 = false;
+            let disposed2 = false;
+
+            const syncService1 = () => ({
+                [Symbol.asyncDispose]: async () => disposed1 = true
+            });
+
+            const syncService2 = () => ({
+                [Symbol.asyncDispose]: async () => disposed2 = true
+            });
+
+            const container = Container.create()
+                .register(m => m.singleton({ 
+                    test1: syncService1,
+                    test2: syncService2
+                }));
+
+            const provider = container.prepare();
+            await provider.dispose();
+
+            expect(disposed1).toBe(true);
+            expect(disposed2).toBe(true);
+        });
     });
 
     describe('scoped', () => {
-        it('should dispose synchronous [Symbol.dispose] scoped services', async () => {
+        it('should synchronously dispose scoped services (Symbol.dispose)', () => {
             let disposed = false;
 
-            const asyncService = () => ({
+            const syncService = () => ({
                 [Symbol.dispose]: () => disposed = true
             });
 
             const container = Container.create()
-                .register(m => m.scoped({ test: asyncService }));
+                .register(m => m.scoped({ test: syncService }));
 
             const provider = container.prepare();
             const scope = provider.createScope();
@@ -318,21 +368,73 @@ describe('dispose services', () => {
             expect(disposed).toBe(true);
         });
 
-        it('should dispose asynchronous [Symbol.asyncDispose] scoped services', async () => {
+        it('should asynchronously dispose scoped services (Symbol.asyncDispose)', async () => {
             let disposed = false;
 
-            const asyncService = () => ({
+            const syncService = () => ({
                 [Symbol.asyncDispose]: async () => disposed = true
             });
 
             const container = Container.create()
-                .register(m => m.scoped({ test: asyncService }));
+                .register(m => m.scoped({ test: syncService }));
 
             const provider = container.prepare();
             const scope = provider.createScope();
             await scope.dispose();
 
             expect(disposed).toBe(true);
+        });
+
+        it('should synchronously dispose multiple scoped services (Symbol.dispose)', () => {
+            let disposed1 = false;
+            let disposed2 = false;
+
+            const syncService1 = () => ({
+                [Symbol.dispose]: () => disposed1 = true
+            });
+
+            const syncService2 = () => ({
+                [Symbol.dispose]: () => disposed2 = true
+            })
+
+            const container = Container.create()
+                .register(m => m.scoped({ 
+                    test1: syncService1,
+                    test2: syncService2
+                }));
+
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            scope.dispose();
+
+            expect(disposed1).toBe(true);
+            expect(disposed2).toBe(true);
+        });
+
+        it('should asynchronously dispose multiple scoped services (Symbol.asyncDispose)', async () => {
+            let disposed1 = false;
+            let disposed2 = false;
+
+            const syncService1 = () => ({
+                [Symbol.asyncDispose]: async () => disposed1 = true
+            });
+
+            const syncService2 = () => ({
+                [Symbol.asyncDispose]: async () => disposed2 = true
+            });
+
+            const container = Container.create()
+                .register(m => m.scoped({ 
+                    test1: syncService1,
+                    test2: syncService2
+                }));
+
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            await scope.dispose();
+
+            expect(disposed1).toBe(true);
+            expect(disposed2).toBe(true);
         });
     });
 });
