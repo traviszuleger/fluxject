@@ -107,7 +107,7 @@ export class Container {
             const maybePromise = registration.instantiate(container.#createHostServiceProvider(singletons));
             if(typeof maybePromise === "object" && "then" in maybePromise) {
                 if(promise) {
-                    promise = promise.then(maybePromise).then(val => {
+                    promise = promise.then(() => maybePromise).then(val => {
                         container.#defineFluxjectProperties(val, registration);
                         singletons[registration.name] = val;
                     });
@@ -214,7 +214,7 @@ export class Container {
             const maybePromise = registration.instantiate(this.#createHostServiceProvider(singletons));
             if(typeof maybePromise === "object" && "then" in maybePromise) {
                 if(promise) {
-                    promise = promise.then(maybePromise).then(val => {
+                    promise = promise.then(() => maybePromise).then(val => {
                         this.#defineFluxjectProperties(val, registration);
                         obj[registration.name] = val;
                     })
@@ -231,6 +231,7 @@ export class Container {
                 obj[registration.name] = maybePromise;
             }
         }
+
         const scopedServiceProvider = new Proxy(obj, {
             get: (t,p,r) => {
                 if(p in t) {
@@ -282,6 +283,7 @@ export class Container {
         if(promise) {
             return promise.then(() => scopedServiceProvider);
         }
+        
         return scopedServiceProvider;
     }
 

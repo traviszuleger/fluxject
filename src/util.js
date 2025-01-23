@@ -18,10 +18,8 @@ export function isConstructor(fn) {
     if(fn instanceof AsyncFunction) {
         return false;
     }
-    if("constructor" in fn) {
-        return true;
-    }
-    return false;
+    const prototype = fn.prototype;
+    return prototype && typeof prototype === 'object' && prototype.constructor === fn;
 }
 
 /**

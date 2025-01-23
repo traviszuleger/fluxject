@@ -19,8 +19,9 @@ export const FluxjectProperties = {
 
 /**
  * Various hidden symbol properties that describe the Service being used.
- * @typedef { { [K in typeof FLUXJECT_ID]: `${string}-${string}-${string}-${string}-${string}` } 
+ * @typedef { { [K in typeof FLUXJECT_ID]: string } 
  *   & { [K in typeof FLUXJECT_UPTIME]: TimeSpan }
+ *   & { [K in typeof FLUXJECT_LIFETIME]: "Scoped"|"Singleton"|"Transient" }
  * } FluxjectProperties
  */
 
