@@ -5,6 +5,17 @@ to be accessed throughout your application.
 
 __`Fluxject` is young in development, and is prone to errors or unexpected behavior.__  
 __Please submit bugs and feature requests as an issue on the GitHub page.__
+
+## Table of Contents
+- [General Usage Example](#example)
+- [Lifetime](#lifetime)
+    - [Scoped Services](#scoped)
+    - [Singleton Services](#singleton)
+    - [Transient Services](#transient)
+- [Asynchronous Services](#async)
+- [Disposal of Services](#dispose)
+    - [Type Safety](#type-safety)
+
 ## Example
 
 ```js
@@ -180,6 +191,16 @@ As of v1.1, you can provide factory functions that yield a `Promise` type as a r
 
 __It is important to note that `Transient` lifetime services that return `Promise`s will not be awaited and resolved. `Transient` lifetime services will always return a `Promise` which then must be explicitly awaited.__
 
+### Type Safety
+
+When a registered service returns a `Promise`, Fluxject will infer the return type of the `[prepare()]` and/or the `[createScope()]` functions to correctly be a `Promise` or not. 
+
+The return type will be a `HostServiceProvider` type for `[prepare()]` and `ScopedServiceProvider` type for `[createScope()]` when no asynchronous services are registered under the respective lifetimes.
+
+The return type will be a `Promise<HostServiceProvider>` type for `[prepare()]` and `Promise<ScopedServiceProvider>` type for `[createScope()]` when any asynchronous services are registered under the respective lifetimes.
+
+### Examples
+
 Example of registering an asynchronous `Singleton` service:
 
 ```ts
@@ -282,7 +303,17 @@ __Please note that this functionality ONLY exists for Singleton and Scoped servi
 
 ### Type Safety
 
-When you add `[Symbol.asyncDispose]` on a service, Fluxject will pick up the usage of the symbol and automatically infer the return type of the `[dispose()]` function as a `Promise<void>`. Inversely, if only the `[Symbol.dispose]` function is provided (or neither symbol is provided) on all services, then the return type will just be `void`.
+When a registered service has the `[Symbol.asyncDispose]` unique symbol defined on the return type of the service, Fluxject will infer the return type for `[dispose()]` function to correctly be a Promise or not.
+
+The return type of `<HostServiceProvider>.dispose()` will be `void` when no registered `Singleton` services have the `[Symbol.asyncDispose]` function defined on them.  
+
+The return type of `<HostServiceProvider>.dispose()` will be `Promise<void>` when at least one registered `Singleton` service has the `[Symbol.asyncDispose]` function defined on them.
+
+The return type of `<ScopedServiceProvider>.dispose()` will be `void` when no registered `Scoped` services have the `[Symbol.asyncDispose]` function defined on them.  
+
+The return type of `<ScopedServiceProvider>.dispose()` will be `Promise<void>` when at least one registered `Scoped` service has the `[Symbol.asyncDispose]` function defined on them.
+
+### Examples
 
 Example of adding `[Symbol.dispose]` on a `Singleton` service:
 
