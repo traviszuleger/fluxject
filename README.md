@@ -367,7 +367,7 @@ scopedServiceProvider.dispose();
 Example of adding `[Symbol.asyncDispose]` on a `Scoped` service:
 
 ```js
-const myScopedService = () => ({ [Symbol.dispose]: () => console.log(`asynchronously disposed myScopedService`) });
+const myScopedService = () => ({ [Symbol.asyncDispose]: () => console.log(`asynchronously disposed myScopedService`) });
 const container = Container.create()
     .register(m => m.scoped({ myScopedService }));
 
