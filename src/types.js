@@ -28,19 +28,29 @@ export const FluxjectProperties = {
 /**
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
  * Dependency registration map as internally defined by Fluxject
- * @typedef FluxjectCreateScopeObject
+ * @typedef FluxjectScopedServiceProviderProps
+ * @prop {() => keyof Awaited<Resolved<InferValuesFromRegistrationMap<TRegistrationMap>>> extends typeof Symbol['asyncDispose'] ? Promise<void> : void} dispose
+ * Dispose all resources associated with the scoped service provider.
+ */
+
+/**
+ * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
+ * Dependency registration map as internally defined by Fluxject
+ * @typedef FluxjectHostServiceProviderProps
  * @prop {() => AnyPromiseScopes<TRegistrationMap> extends never
  *   ? ScopedServiceProvider<TRegistrationMap>
  *   : Promise<ScopedServiceProvider<TRegistrationMap>> 
  * } createScope
  * Initialize a new level of scope from the host service provider.
+ * @prop {() => keyof Awaited<Resolved<InferValuesFromRegistrationMap<TRegistrationMap>>> extends typeof Symbol['asyncDispose'] ? Promise<void> : void} dispose
+ * Dispose all resources associated with the host service provider.
  */
 
 /**
  * Type representing the `HostServiceProvider` that is intended to be used throughout the lifetime of the application.
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
  * Dependency registration map as internally defined by Fluxject
- * @typedef {Widen<FluxjectCreateScopeObject<TRegistrationMap>
+ * @typedef {Widen<FluxjectHostServiceProviderProps<TRegistrationMap>
  *   & {[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Singleton">]: Awaited<Resolved<InferValueFromRegistration<TRegistrationMap[K]>>>}
  *   & {[K in keyof OnlyRegistrationsOfLifetime<TRegistrationMap, "Transient">]: Resolved<InferValueFromRegistration<TRegistrationMap[K]>>}>
  * } HostServiceProvider
@@ -50,7 +60,7 @@ export const FluxjectProperties = {
  * Type representing the `ScopedServiceProvider` that is returned from the `[createScope()]` function provided in the {@link HostServiceProvider}.
  * @template {Record<string, Registration<any, string, Lifetime>>} TRegistrationMap
  * Dependency registration map as internally defined by Fluxject
- * @typedef {Widen<{[K in keyof TRegistrationMap]: Awaited<Resolved<InferValueFromRegistration<TRegistrationMap[K]>>>}>} ScopedServiceProvider
+ * @typedef {Widen<{[K in keyof TRegistrationMap]: Awaited<Resolved<InferValueFromRegistration<TRegistrationMap[K]>>>} & FluxjectScopedServiceProviderProps<TRegistrationMap>>} ScopedServiceProvider
  */
 
 /**
@@ -213,6 +223,11 @@ export const FluxjectProperties = {
 * ? ResolvedFactoryType<T>
 * : T} Resolved
 */
+
+/**
+ * @template T
+ * @typedef {T|Promise<T>} MaybePromise
+ */
 
 /**
  * Enumerable object for specifying the Lifetime of a registered service.

@@ -142,6 +142,28 @@ export class Container {
                 if(p === "createScope") {
                     return () => this.#createScopedServiceProvider(singletons);
                 }
+                if(p === "dispose") {
+                    return () => {
+                        /** @type {Promise<void>|undefined} */
+                        let promise = undefined;
+                        for(const key in singletons) {
+                            if(singletons[key][Symbol.dispose]) {
+                                singletons[key][Symbol.dispose]();
+                            }
+                            else if(singletons[key][Symbol.asyncDispose]) {
+                                if(promise) {
+                                    promise = promise.then(() => singletons[key][Symbol.asyncDispose]());
+                                }
+                                else {
+                                    promise = singletons[key][Symbol.asyncDispose]();
+                                }
+                            }
+                        }
+                        if(promise) {
+                            return promise;
+                        }
+                    }
+                }
                 if(p in this.#registrations) {
                     if(this.#registrations[p].type === Lifetime.Scoped) {
                         throw new Error(`Scoped registrations cannot be accessed from the HostServiceProvider. (Use the ScopedServiceProvider returned from [createScope()] to access Scoped services.)`);
@@ -239,6 +261,28 @@ export class Container {
                 }
                 if(typeof p === "symbol") {
                     throw new Error(`Property, "${String(p)}", must be of type "String".`);
+                }
+                if(p === "dispose") {
+                    return () => {
+                        /** @type {Promise<void>|undefined} */
+                        let promise = undefined;
+                        for(const key in t) {
+                            if(t[key][Symbol.dispose]) {
+                                t[key][Symbol.dispose]();
+                            }
+                            else if(t[key][Symbol.asyncDispose]) {
+                                if(promise) {
+                                    promise = promise.then(() => t[key][Symbol.asyncDispose]());
+                                }
+                                else {
+                                    promise = t[key][Symbol.asyncDispose]();
+                                }
+                            }
+                        }
+                        if(promise) {
+                            return promise;
+                        }
+                    }
                 }
                 if(!(p in this.#registrations)) {
                     return undefined;

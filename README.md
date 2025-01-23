@@ -102,54 +102,6 @@ console.log(isFooInScope_before, isFooInScope_after);
 // will print "false true"
 ```
 
-#### Async
-
-As of version 1.1, you can now declare factory types and constant types on `Scoped` services as Promises, to support asynchronous initialization.
-
-To accomplish having an asynchronous `Scoped` service, you must `await` the `[createScope()]` function on your host service provider.  
-
-The return type of the `[createScope()]` function will be the same as if you didn't have any Promise scoped services, so the returned `ScopedServiceProvider` will behave in the same manner, as long as it is awaited. As expected, if it is not awaited, a `Promise` is returned that will yield the expected `ScopedServiceProvider`.
-
-See this example:
-
-```ts
-function myNonAsyncService() {
-    // ...
-    return {
-        test: () => console.log(`Test passed!`);
-    }
-}
-
-const nonAsyncContainer = Container
-    .create()
-    .scoped({ myNonAsyncService });
-
-const hsp = nonAsyncContainer.prepare();
-const ssp = hsp.createScope();
-
-ssp.myNonAsyncService.test(); // Will print `Test passed!` as expected
-
-async function myAsyncService() {
-    // ...
-    return {
-        test: () => console.log(`Test passed!`);
-    }
-}
-
-const asyncContainer = Container
-    .create()
-    .scoped({ myAsyncService });
-
-// do not have to await [prepare()] as the return type of prepare is only a promise if a Singleton instantiator returns a Promise
-const hsp = asyncContainer.prepare(); 
-const unawaitedSSP = hsp.createScope(); // however...
-
-unawaitedSSP.myAsyncService.test(); // Will fail with an error, stating that `test` is not a function (and is undefined instead)
-// INSTEAD do this
-const awaitedSSP = await hsp.createScope();
-awaitedSSP.myAsyncService.test(); // Will print `Test passed!` as expected
-```
-
 ### Singleton
 
 `Singleton` lifetime services will last as long as the application's lifetime, meaning that once you call `.prepare()`, the singleton service will be instantiated and will remain as such until your programs quits (or, technically, once the return value from `.prepare()` leaves scope)
@@ -178,20 +130,6 @@ You can alter a singleton's properties (or value if the value passed was a const
 const hostServiceProvider = container.prepare();
 hostServiceProvider.staticValue++;
 assert(hostServiceProvider.staticValue === 1);
-```
-
-#### Async
-
-As of version 1.1, you can now declare factory types and constant types on `Singleton` services as Promises, to support asynchronous initialization.
-
-To accomplish having an asynchronous `Singleton` service, you must `await` the `[prepare()]` function on your configured container.
-
-The return type of the `[prepare()]` function will be the same as if you didn't have any Promise singleton services, so the returned `HostServiceProvider` will behave in the same manner, as long as it is awaited. As expected, if it is not awaited, a `Promise` is returned that will yield the expected `HostServiceProvider`.
-
-See this example:
-
-```ts
-
 ```
 
 ### Transient
@@ -236,26 +174,181 @@ const TransientService = hostProvider.TransientService;
 // now, TransientService can be used throughout the rest of its own lifetime without it being re-instantiated.
 ```
 
-#### Async
+## Async
 
-Unlike the aforementioned `Singleton` and `Scoped` services that handle asynchronous functionality for you, `Transient` services cannot be pre-awaited using the `[prepare()]` or `[createScope()]` functions, since `Transient` services are initialized on demand. Therefore, if you want to register an asynchronous `Transient` service, you must await the requested service before using it.
+As of v1.1, you can provide factory functions that yield a `Promise` type as a return value (or as a constant value) which can be resolved by `await`ing the `[prepare()]` or `[createScope()]` functions on your container.
 
-See this example:
+__It is important to note that `Transient` lifetime services that return `Promise`s will not be awaited and resolved. `Transient` lifetime services will always return a `Promise` which then must be explicitly awaited.__
+
+Example of registering an asynchronous `Singleton` service:
 
 ```ts
-async function myAsyncService() {
-    // ...
-    return {
-        test: () => console.log(`Test passed!`);
-    }
+const mySyncSingletonService = () => ({ test: () => `test sync` });
+const myAsyncSingletonService = async () => ({ test: () => `test async` });
+const container = Container.create()
+    .register(m => m.singleton({ mySyncSingletonService }))
+    .register(m => m.singleton({ myAsyncSingletonService }));
+
+const unawaitedHostServiceProvider = container.prepare();
+// This WILL fail as the type of `unawaitedHostServiceProvider` will actually be a Promise.
+console.log(unawaitedHostServiceProvider.mySyncSingletonService.test()); 
+
+// instead... do this!
+const awaitedHostServiceProvider = await container.prepare();
+console.log(awaitedHostServiceProvider.mySyncSingletonService.test()); // will print "test sync"
+console.log(awaitedHostServiceProvider.myAsyncSingletonService.test()); // will print "test async"
+
+// but it's important to know, that if we chose not to have an asynchronous singleton, 
+// then nothing will change from the original behavior of Fluxject pre v1.1
+// (AND it's strongly typed-- the return type will be inferred as a Promise, only if an Async Singleton Service was registered)
+const nonAsyncContainer = Container.create()
+    .register(m => m.singleton({ mySyncSingletonService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.mySyncSingletonService.test(); // will print "test sync"
+```
+
+Example of registering an asynchronous `Transient` service:
+
+```js
+const mySyncTransientService = () => ({ test: () => `test sync` });
+const myAsyncTransientService = async () => ({ test: () => `test async` });
+const container = Container.create()
+    .register(m => m.transient({ mySyncTransientService }))
+    .register(m => m.transient({ myAsyncTransientService }));
+
+// Since Transient services are instantiated on demand, 
+// there is no way for [.prepare()] to resolve the returned Promises from Transient services
+const hostServiceProvider = container.prepare();
+
+// so, as you would expect, the return type from these instantiated Transient services will be a Promise
+const test = await hostServiceProvider.myAsyncTransientService;
+test();
+// or
+(await hostServiceProvider.myAsyncTransientService).test(); // will print "test async"
+// just remember, that every time you de-reference an asynchronous Transient service from the service provider
+// you must await the returned value, as Transient services are always instantiated on demand, meaning a brand new Promise will always be returned.
+
+// and thus, synchronous Transient services will have the same behavior as pre v1.1 of Fluxject
+hostServiceProvider.mySyncTransientService.test(); // will print "test sync" 
+```
+
+Example of registering an asynchronous `Scoped` service:
+
+```js
+const mySyncScopedService = () => ({ test: () => `test sync` });
+const myAsyncScopedService = async () => ({ test: () => `test async` });
+const container = Container.create()
+    .register(m => m.singleton({ mySyncSingletonService: () => `test singleton sync` }))
+    .register(m => m.scoped({ mySyncScopedService }))
+    .register(m => m.scoped({ myAsyncScopedService }));
+
+const unawaitedHostServiceProvider = container.prepare();
+// This is still valid! We did not register any asynchronous Singleton services, so [prepare()] will not return a Promise. 
+console.log(unawaitedHostServiceProvider.mySyncSingletonService.test()); // will print "test singleton sync"
+
+// but, since we have asynchronous Scoped variables...
+
+const unawaitedScopedServiceProvider = unawaitedHostServiceProvider.createScope();
+
+// This WILL fail, since the [createScope()] function will return a Promise.
+unawaitedScopedServiceProvider.test(); // error
+
+// instead... do this!
+const awaitedScopedServiceProvider = await container.createScope();
+console.log(awaitedHostServiceProvider.mySyncScopedService.test()); // will print "test sync"
+console.log(awaitedHostServiceProvider.myAsyncScopedService.test()); // will print "test async"
+
+// and just like Singleton services, if no asynchronous Scoped service was provided, then the return type of [createScope()]
+// will not be a Promise
+
+const nonAsyncContainer = Container.create()
+    .register(m => m.scoped({ mySyncScopedService }));
+
+const hostServiceProvider = nonAsyncContainer.prepare();
+const scopedServiceProvider = hostServiceProvider.createScope();
+console.log(scopedServiceProvider.mySyncScopedService.test()); // will print "test sync"
+```
+
+## Dispose
+
+As of v1.1, you can provide the pre-defined `Symbol.dispose` or `Symbol.asyncDispose` on a service that can be disposed at any given time if you call the `[dispose()]` on the service provider you are intending to dispose of.  
+
+Both a `HostServiceProvider` and `ScopedServiceProvider` will have the `[dispose()]` function. When the `[dispose()]` function is called on the `HostServiceProvider`, All `Singleton` services will be disposed  
+
+This functionality allows for easy clean-up of Singleton and Scoped services without having to explicitly clean up the service yourself.
+
+__Please note that this functionality ONLY exists for Singleton and Scoped services, there is unfortunately no way of knowing when a Transient service has left scope without the usage of TypeScript's `using` keyword.__
+
+### Type Safety
+
+When you add `[Symbol.asyncDispose]` on a service, Fluxject will pick up the usage of the symbol and automatically infer the return type of the `[dispose()]` function as a `Promise<void>`. Inversely, if only the `[Symbol.dispose]` function is provided (or neither symbol is provided) on all services, then the return type will just be `void`.
+
+Example of adding `[Symbol.dispose]` on a `Singleton` service:
+
+```js
+const mySingletonService = () => ({ [Symbol.dispose]: () => console.log(`disposed mySingletonService`) });
+const container = Container.create()
+    .register(m => m.singleton({ mySingletonService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.dispose();
+// will print "disposed mySingletonService"
+```
+
+Example of adding `[Symbol.asyncDispose]` on a `Singleton` service:
+
+```js
+const mySingletonService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed mySingletonService`) });
+const container = Container.create()
+    .register(m => m.singleton({ mySingletonService }));
+
+const hostServiceProvider = container.prepare();
+const returnedValue = hostServiceProvider.dispose();
+
+if("then" in returnedValue) {
+    await returnedValue;
+    // will print "asynchronously disposed mySingletonService"
+    console.log(`All done disposing!`);
+    // will print "All done disposing!"
 }
+```
 
-const container = Container
-    .create()
-    .register(m => m.transient({ myAsyncService }));
+Example of adding `[Symbol.dispose]` on a `Scoped` service:
 
-const hsp = container.prepare(); // do not have to use `await`, as there are no asynchronous `Singleton` services.
-hsp.myAsyncService.test(); // Will fail with an error, stating that `test` is not a function (and is undefined instead)
-// INSTEAD do this
-(await hsp.myAsyncService).test();
+```js
+const myScopedService = () => ({ [Symbol.dispose]: () => console.log(`disposed myScopedService`) });
+const container = Container.create()
+    .register(m => m.scoped({ myScopedService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.dispose();
+// nothing will print, the [dispose()] function on the hostServiceProvider will only dispose of Singleton services.
+
+const scopedServiceProvider = hostServiceProvider.createScope();
+scopedServiceProvider.dispose();
+// will print "disposed myScopedService"
+```
+
+Example of adding `[Symbol.asyncDispose]` on a `Scoped` service:
+
+```js
+const myScopedService = () => ({ [Symbol.dispose]: () => console.log(`asynchronously disposed myScopedService`) });
+const container = Container.create()
+    .register(m => m.scoped({ myScopedService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.dispose(); // return type will be void
+// nothing will print, the [dispose()] function on the hostServiceProvider will only dispose of Singleton services.
+
+const scopedServiceProvider = hostServiceProvider.createScope();
+const returnedValue = scopedServiceProvider.dispose();
+// will print "disposed myScopedService"
+
+if("then" in returnedValue) {
+    await returnedValue;
+    // will print "asynchronously disposed myScopedService"
+    console.log(`All done disposing!`);
+    // will print "All done disposing!"
+}
 ```

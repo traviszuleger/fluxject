@@ -5,8 +5,8 @@ import { Lifetime } from '../src/types.js'
 describe('Fluxject Container Testing', () => {
     describe('create()', () => {
         it('should create container with default config', () => {
-            const container = Container.create()
-            expect(container).toBeInstanceOf(Container)
+            const container = Container.create();
+            expect(container).toBeInstanceOf(Container);
         })
 
         it('should create container with custom config', () => {
@@ -14,7 +14,7 @@ describe('Fluxject Container Testing', () => {
                 strict: false,
                 enablePredefinedProperties: true
             })
-            expect(container).toBeInstanceOf(Container) 
+            expect(container).toBeInstanceOf(Container);
         })
     })
 
@@ -25,16 +25,19 @@ describe('Fluxject Container Testing', () => {
             const container = Container.create()
                 .register(m => m.singleton({
                     test: TestService
-                }))
+                }));
 
-            const provider = container.prepare()
-            expect(provider.test).toBeInstanceOf(TestService)
+            const provider = container.prepare();
+            expect(provider.test).toBeInstanceOf(TestService);
         })
 
         it('should register scoped service', () => {
             class TestService {}
 
             const container = Container.create()
+                .register(m => m.singleton({
+                    testSingleton: TestService
+                }))
                 .register(m => m.scoped({
                     test: TestService  
                 }))
@@ -258,6 +261,78 @@ describe('async services', () => {
 
             const provider = await container.prepare();
             expect(provider.service.getValue()).toBe(1);
+        });
+    });
+});
+
+describe('dispose services', () => {
+    describe('singletons', () => {
+        it('should dispose synchronous [Symbol.dispose] singleton services', async () => {
+            let disposed = false;
+
+            const asyncService = () => ({
+                [Symbol.dispose]: () => disposed = true
+            });
+
+            const container = Container.create()
+                .register(m => m.singleton({ test: asyncService }));
+
+            const provider = container.prepare();
+            provider.dispose();
+
+            expect(disposed).toBe(true);
+        });
+
+        it('should dispose asynchronous [Symbol.asyncDispose] singleton services', async () => {
+            let disposed = false;
+
+            const asyncService = () => ({
+                [Symbol.asyncDispose]: async () => disposed = true
+            });
+
+            const container = Container.create()
+                .register(m => m.singleton({ test: asyncService }));
+
+            const provider = container.prepare();
+            await provider.dispose();
+
+            expect(disposed).toBe(true);
+        });
+    });
+
+    describe('scoped', () => {
+        it('should dispose synchronous [Symbol.dispose] scoped services', async () => {
+            let disposed = false;
+
+            const asyncService = () => ({
+                [Symbol.dispose]: () => disposed = true
+            });
+
+            const container = Container.create()
+                .register(m => m.scoped({ test: asyncService }));
+
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            scope.dispose();
+
+            expect(disposed).toBe(true);
+        });
+
+        it('should dispose asynchronous [Symbol.asyncDispose] scoped services', async () => {
+            let disposed = false;
+
+            const asyncService = () => ({
+                [Symbol.asyncDispose]: async () => disposed = true
+            });
+
+            const container = Container.create()
+                .register(m => m.scoped({ test: asyncService }));
+
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            await scope.dispose();
+
+            expect(disposed).toBe(true);
         });
     });
 });
