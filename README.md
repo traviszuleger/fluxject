@@ -377,7 +377,6 @@ hostServiceProvider.dispose(); // return type will be void
 
 const scopedServiceProvider = hostServiceProvider.createScope();
 const returnedValue = scopedServiceProvider.dispose();
-// will print "disposed myScopedService"
 
 if("then" in returnedValue) {
     await returnedValue;
