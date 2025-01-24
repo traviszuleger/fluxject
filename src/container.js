@@ -355,28 +355,36 @@ export class Container {
                 }
                 
                 // Last case: service is transient, so instantiate and return the transient service.
-                const registration = container.#registrations[requestedServiceName];
-                instantiatedSingletonServices.push(registration.name);
-                const maybePromise = container.#createHostServiceProvider(
-                    container,
-                    rSymbols,
-                    rSingletonServices, 
-                    instantiatedSingletonServices,
-                    registration
-                );
-                if(!isPromise(maybePromise)) {
-                    const service = container.#defineFluxjectSymbolsOnService(maybePromise, registration);
-                    return registration.instantiate(service);
+                try {
+                    const registration = container.#registrations[requestedServiceName];
+                    instantiatedSingletonServices.push(registration.name);
+                    const maybePromise = container.#createHostServiceProvider(
+                        container,
+                        rSymbols,
+                        rSingletonServices, 
+                        instantiatedSingletonServices,
+                        registration
+                    );
+                    if(!isPromise(maybePromise)) {
+                        const service = container.#defineFluxjectSymbolsOnService(maybePromise, registration);
+                        return registration.instantiate(service);
+                    }
+                    return maybePromise
+                        .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
+                        .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
+                        .catch(err => {
+                            if(err instanceof RangeError) {
+                                throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
+                            }
+                            throw err;
+                        });
                 }
-                return maybePromise
-                    .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
-                    .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
-                    .catch(err => {
-                        if(err instanceof RangeError) {
-                            throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
-                        }
-                        throw err;
-                    });
+                catch(err) {
+                    if(err instanceof RangeError) {
+                        throw new RangeError(`Circular dependency in registration [${String(container.#registrations[requestedServiceName].name)}].`, { cause: err.cause });
+                    }
+                    throw err;
+                }
             },
             set: (hostServiceProvider, requestedServiceName, newValue) => {
                 // special case for FluxjectSymbols.Disposed
@@ -601,28 +609,36 @@ export class Container {
                 }
 
                 // Last case: service is transient, so instantiate and return the transient service.
-                const registration = this.#registrations[requestedServiceName];
-                instantiatedSingletonServices.push(registration.name);
-                const maybePromise = this.#createHostServiceProvider(
-                    this,
-                    rSymbols,
-                    rSingletonServices, 
-                    instantiatedSingletonServices,
-                    registration
-                );
-                if(!isPromise(maybePromise)) {
-                    const service = this.#defineFluxjectSymbolsOnService(maybePromise, registration);
-                    return registration.instantiate(service);
+                try {
+                    const registration = this.#registrations[requestedServiceName];
+                    instantiatedSingletonServices.push(registration.name);
+                    const maybePromise = this.#createHostServiceProvider(
+                        this,
+                        rSymbols,
+                        rSingletonServices, 
+                        instantiatedSingletonServices,
+                        registration
+                    );
+                    if(!isPromise(maybePromise)) {
+                        const service = this.#defineFluxjectSymbolsOnService(maybePromise, registration);
+                        return registration.instantiate(service);
+                    }
+                    return maybePromise
+                        .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
+                        .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
+                        .catch(err => {
+                            if(err instanceof RangeError) {
+                                throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
+                            }
+                            throw err;
+                        });
                 }
-                return maybePromise
-                    .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
-                    .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
-                    .catch(err => {
-                        if(err instanceof RangeError) {
-                            throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
-                        }
-                        throw err;
-                    });
+                catch(err) {
+                    if(err instanceof RangeError) {
+                        throw new RangeError(`Circular dependency in registration [${String(requestedServiceName)}].`, { cause: err.cause });
+                    }
+                    throw err;
+                }
             },
             set: (scopedServiceProvider, requestedServiceName, newValue) => {
                 // special case for FluxjectSymbols.Disposed
