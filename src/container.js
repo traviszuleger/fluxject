@@ -89,9 +89,6 @@ export class Container {
      * @returns {Container<{}>} A new Container instance
      */
     static create(config={}) {
-        if(needsPolyfills()) {
-            throw new Error(`Could not automatically fill polyfills. Add the required polyfills by running importing and calling [addPolyfills] from "fluxject/polyfills" before instanting the Container.`)
-        }
         const containerConfig = {
             strict: false,
             enablePredefinedProperties: false,
