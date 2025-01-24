@@ -10,18 +10,39 @@ export const FLUXJECT_ID = Symbol("fluxject-id");
 export const FLUXJECT_UPTIME = Symbol("fluxject-uptime");
 /** @type {unique symbol} */
 export const FLUXJECT_LIFETIME = Symbol("fluxject-lifetime");
+/** @type {unique symbol} */
+export const FLUXJECT_DISPOSED = Symbol("fluxject-disposed");
+/** @type {unique symbol} */
+export const FLUXJECT_SERVICE_PROVIDER = Symbol("fluxject-service-provider");
+/** @type {unique symbol} */
+export const FLUXJECT_SINGLETONS_STORE_ID = Symbol("fluxject-singletons-store-id");
+/** @type {unique symbol} */
+export const FLUXJECT_SCOPES_STORE_ID = Symbol("fluxject-scopes-store-id");
 
-export const FluxjectProperties = {
+/** @enum {typeof FluxjectSymbols[keyof typeof FluxjectSymbols]} */
+export const FluxjectSymbols = Object.freeze({
+    Disposed: FLUXJECT_DISPOSED,
+    Id: FLUXJECT_ID,
+    Lifetime: FLUXJECT_LIFETIME,
+    ScopesStoreId: FLUXJECT_SCOPES_STORE_ID,
+    ServiceProvider: FLUXJECT_SERVICE_PROVIDER,
+    SingletonsStoreId: FLUXJECT_SINGLETONS_STORE_ID,
+    Uptime: FLUXJECT_UPTIME
+});
+
+/** @enum {typeof FluxjectServiceSymbols[keyof typeof FluxjectServiceSymbols]} */
+export const FluxjectServiceSymbols = Object.freeze({
     Id: FLUXJECT_ID,
     Uptime: FLUXJECT_UPTIME,
     Lifetime: FLUXJECT_LIFETIME
-};
+});
 
 /**
  * Various hidden symbol properties that describe the Service being used.
  * @typedef { { [K in typeof FLUXJECT_ID]: string } 
  *   & { [K in typeof FLUXJECT_UPTIME]: TimeSpan }
  *   & { [K in typeof FLUXJECT_LIFETIME]: "Scoped"|"Singleton"|"Transient" }
+ *   & { [K in typeof FLUXJECT_DISPOSED]: boolean }
  * } FluxjectProperties
  */
 
