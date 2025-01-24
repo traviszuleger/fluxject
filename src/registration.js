@@ -61,7 +61,7 @@ export class RegistrationProvider {
  * Type holding type information and runtime info for the a registered service.
  * @template T
  * Type for the expected value for when this registered service resolves.
- * @template {string} TName
+ * @template {string|symbol} TName
  * Type for the given name for this registered service.
  * @template {Lifetime} TLifeTime
  * The type denoting what kind of lifetime this registered service is.

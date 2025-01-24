@@ -39,3 +39,13 @@ export function getInstantiateFunction(fn) {
     }
     return () => fn;
 }
+
+/**
+ * @param {any} obj 
+ * @param {string} key 
+ * @returns {any}
+ */
+export function omitKey(obj, key) {
+    const { [key]: omit, ...rest } = obj;
+    return rest;
+}

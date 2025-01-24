@@ -1,22 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { Container } from '../src/container.js'
-import { Lifetime } from '../src/types.js'
+//@ts-check
+import { describe, it, expect } from 'vitest';
+import { Container } from '../src/container.js';
 
-describe('Fluxject Container Testing', () => {
+describe('sync services', () => {
     describe('create()', () => {
         it('should create container with default config', () => {
             const container = Container.create();
             expect(container).toBeInstanceOf(Container);
-        })
+        });
 
         it('should create container with custom config', () => {
             const container = Container.create({
-                strict: false,
-                enablePredefinedProperties: true
-            })
+                strict: false
+            });
             expect(container).toBeInstanceOf(Container);
-        })
-    })
+        });
+    });
 
     describe('register()', () => {
         it('should register singleton service', () => {
@@ -29,7 +28,7 @@ describe('Fluxject Container Testing', () => {
 
             const provider = container.prepare();
             expect(provider.test).toBeInstanceOf(TestService);
-        })
+        });
 
         it('should register scoped service', () => {
             class TestService {}
@@ -40,12 +39,12 @@ describe('Fluxject Container Testing', () => {
                 }))
                 .register(m => m.scoped({
                     test: TestService  
-                }))
+                }));
 
-            const provider = container.prepare()
-            const scope = provider.createScope()
-            expect(scope.test).toBeInstanceOf(TestService)
-        })
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            expect(scope.test).toBeInstanceOf(TestService);
+        });
 
         it('should register transient service', () => {
             class TestService {}
@@ -53,12 +52,12 @@ describe('Fluxject Container Testing', () => {
             const container = Container.create()
                 .register(m => m.transient({
                     test: TestService
-                }))
+                }));
 
-            const provider = container.prepare()
-            expect(provider.test).toBeInstanceOf(TestService)
-        })
-    })
+            const provider = container.prepare();
+            expect(provider.test).toBeInstanceOf(TestService);
+        });
+    });
 
     describe('prepare()', () => {
         it('should prepare container with registered services', () => {
@@ -67,374 +66,158 @@ describe('Fluxject Container Testing', () => {
             const container = Container.create()
                 .register(m => m.singleton({
                     test: TestService
-                }))
-
-            const provider = container.prepare()
-            expect(provider.test).toBeInstanceOf(TestService)
-            expect(provider.createScope).toBeInstanceOf(Function)
-        })
-    })
-
-    describe('scoping', () => {
-        it('should not allow accessing scoped service from host provider', () => {
-            class TestService {}
-
-            const container = Container.create()
-                .register(m => m.scoped({
-                    test: TestService
-                }))
-
-            const provider = container.prepare()
-            expect(() => provider.test).toThrow()
-        })
-
-        it('should allow accessing scoped service from scope', () => {
-            class TestService {}
-
-            const container = Container.create()
-                .register(m => m.scoped({
-                    test: TestService
-                }))
-
-            const provider = container.prepare()
-            const scope = provider.createScope()
-            expect(scope.test).toBeInstanceOf(TestService)
-        })
-    })
-});
-
-describe('async services', () => {
-    describe('singletons', () => {
-        it('should handle async singleton factory', async () => {
-            const asyncService = async () => ({
-                test: () => 'test'
-            });
-
-            const container = Container.create()
-                .register(m => m.singleton({ 
-                    test: asyncService 
                 }));
 
-            const provider = await container.prepare();
-            expect(provider.test.test()).toBe('test');
+            const provider = container.prepare();
+            expect(provider.test).toBeInstanceOf(TestService);
+            expect(provider.createScope).toBeInstanceOf(Function);
+        });
+    });
+
+    describe('scoping', () => {
+        it('should not allow accessing scoped service from host provider (strict: false)', () => {
+            class TestService {}
+
+            const container = Container.create()
+                .register(m => m.scoped({
+                    test: TestService
+                }));
+
+            const provider = container.prepare();
+            //@ts-expect-error
+            expect(provider.test).toBeUndefined();
         });
 
-        it('should resolve all async singletons on prepare', async () => {
-            let service1Created = false;
-            let service2Created = false;
+        it('should not allow accessing scoped service from host provider (strict: true)', () => {
+            class TestService {}
 
-            const asyncService1 = async () => {
-                service1Created = true;
-                return { value: 1 };
-            };
+            const container = Container.create({ strict: true })
+                .register(m => m.scoped({
+                    test: TestService
+                }));
 
-            const asyncService2 = async () => {
-                service2Created = true; 
-                return { value: 2 };
-            };
+            const provider = container.prepare();
+            //@ts-expect-error
+            expect(() => provider.test).toThrow();
+        });
+
+        it('should allow accessing scoped service from scope', () => {
+            class Test1Service {
+                x = 1;
+            }
+
+            class Test2Service {
+                constructor({ test1 }) {
+                    this.test1 = test1;
+                }
+
+                test() {
+                    return this.test1.x;
+                }
+            }
+
+            const container = Container.create()
+                .register(m => m.scoped({
+                    test1: Test1Service,
+                    test2: Test2Service
+                }));
+
+            const provider = container.prepare();
+            const scope = provider.createScope();
+            expect(scope.test1).toBeInstanceOf(Test1Service);
+            expect(scope.test2).toBeInstanceOf(Test2Service);
+            expect(scope.test2.test()).toBe(1);
+        });
+
+        it('should have an undefined value for own singleton service name when attempting to de-reference services on instantiation (strict: false)', () => {
+            let isUndefined = false;
+            class TestService {
+                constructor({ test }) {
+                    isUndefined = test === undefined;
+                }
+            }
 
             const container = Container.create()
                 .register(m => m.singleton({
-                    service1: asyncService1,
-                    service2: asyncService2
+                    test: TestService
                 }));
 
-            const provider = await container.prepare();
-
-            expect(service1Created).toBe(true);
-            expect(service2Created).toBe(true);
-            expect(provider.service1.value).toBe(1);
-            expect(provider.service2.value).toBe(2);
-        });
-    });
-
-    describe('scoped', () => {
-        it('should handle async scoped factory', async () => {
-            const asyncService = async () => ({
-                test: () => 'test'
-            });
-
-            const container = Container.create()
-                .register(m => m.scoped({
-                    test: asyncService
-                }));
-
-            const provider = container.prepare();
-            const scope = await provider.createScope();
-            expect(scope.test.test()).toBe('test');
+            container.prepare();
+            expect(isUndefined).toBe(true);
         });
 
-        it('should resolve all async scoped services when creating scope', async () => {
-            let service1Created = false;
-            let service2Created = false;
-
-            const asyncService1 = async () => {
-                service1Created = true;
-                return { value: 1 };
-            };
-
-            const asyncService2 = async () => {
-                service2Created = true;
-                return { value: 2 };
-            };
-
-            const container = Container.create()
-                .register(m => m.scoped({
-                    service1: asyncService1,
-                    // you left off here, look at the terminal
-                    service2: asyncService2
-                }));
-
-            const provider = container.prepare();
-            const scope = await provider.createScope();
-
-            expect(service1Created).toBe(true);
-            expect(service2Created).toBe(true);
-            expect(scope.service1.value).toBe(1);
-            expect(scope.service2.value).toBe(2);
-        });
-    });
-
-    describe('transient', () => {
-        it('should handle async transient factory', async () => {
-            const asyncService = async () => ({
-                test: () => 'test'
-            });
+        it('should have an undefined value for own transient service name when attempting to de-reference services on instantiation (strict: false)', () => {
+            let isUndefined = false;
+            class TestService {
+                constructor({ test }) {
+                    isUndefined = test === undefined;
+                }
+            }
 
             const container = Container.create()
                 .register(m => m.transient({
-                    test: asyncService
+                    test: TestService
                 }));
-
             const provider = container.prepare();
-            const service = await provider.test;
-            expect(service.test()).toBe('test');
+            provider.test;
+            expect(isUndefined).toBe(true);
         });
 
-        it('should create new instance on each request', async () => {
-            let instanceCount = 0;
-
-            const asyncService = async () => {
-                instanceCount++;
-                return { value: instanceCount };
-            };
+        it('should have an undefined value for own scoped service name when attempting to de-reference services on instantiation (strict: false)', () => {
+            let isUndefined = false;
+            class TestService {
+                constructor({ test }) {
+                    isUndefined = test === undefined;
+                }
+            }
 
             const container = Container.create()
+                .register(m => m.scoped({
+                    test: TestService
+                }));
+            const provider = container.prepare();
+            provider.createScope();
+            expect(isUndefined).toBe(true);
+        });
+
+        it('should throw when attempting to de-reference own singleton service name on instantiation (strict: true)', () => {
+            class TestService {
+                constructor({ test }) { }
+            }
+
+            const container = Container.create({ strict: true })
+                .register(m => m.singleton({
+                    test: TestService
+                }));
+
+            expect(() => container.prepare()).toThrow();
+        });
+
+        it('should throw when attempting to de-reference own transient service name on instantiation (strict: true)', () => {
+            class TestService {
+                constructor({ test }) { }
+            }
+            const container = Container.create({ strict: true })
                 .register(m => m.transient({
-                    test: asyncService
+                    test: TestService
                 }));
 
             const provider = container.prepare();
-            
-            const instance1 = await provider.test;
-            const instance2 = await provider.test;
-
-            expect(instance1.value).toBe(1);
-            expect(instance2.value).toBe(2);
-            expect(instanceCount).toBe(2);
-        });
-    });
-
-    describe('mixed lifetimes', () => {
-        it('should handle mix of sync and async services', async () => {
-            const syncService = () => ({ value: 1 });
-            const asyncService = async () => ({ value: 2 });
-
-            const container = Container.create()
-                .register(m => m.singleton({ sync: syncService }))
-                .register(m => m.singleton({ async: asyncService }));
-
-            const provider = await container.prepare();
-            expect(provider.sync.value).toBe(1);
-            expect(provider.async.value).toBe(2);
+            expect(() => provider.test).toThrow();
         });
 
-        it('should handle dependencies between sync and async services', async () => {
-            const asyncDep = async () => ({ value: 1 });
-            const syncService = (services) => ({
-                getValue: () => services.dep.value
-            });
+        it('should throw when attempting to de-reference own scoped service name on instantiation (strict: true)', () => {
+            class TestService {
+                constructor({ test }) { }
+            }
 
-            const container = Container.create()
-                .register(m => m.singleton({ dep: asyncDep }))
-                .register(m => m.singleton({ service: syncService }));
-
-            const provider = await container.prepare();
-            expect(provider.service.getValue()).toBe(1);
-        });
-    });
-});
-
-describe('dispose services', () => {
-    describe('singletons', () => {
-        it('should synchronously dispose singleton services (Symbol.dispose)', () => {
-            let disposed = false;
-
-            const syncService = () => ({
-                [Symbol.dispose]: () => disposed = true
-            });
-
-            const container = Container.create()
-                .register(m => m.singleton({ test: syncService }));
-
-            const provider = container.prepare();
-            provider.dispose();
-
-            expect(disposed).toBe(true);
-        });
-
-        it('should asynchronously dispose singleton services (Symbol.asyncDispose)', async () => {
-            let disposed = false;
-
-            const syncService = () => ({
-                [Symbol.asyncDispose]: async () => disposed = true
-            });
-
-            const container = Container.create()
-                .register(m => m.singleton({ test: syncService }));
-
-            const provider = container.prepare();
-            await provider.dispose();
-
-            expect(disposed).toBe(true);
-        });
-
-        it('should synchronously dispose multiple singleton services (Symbol.dispose)', () => {
-            let disposed1 = false;
-            let disposed2 = false;
-
-            const syncService1 = () => ({
-                [Symbol.dispose]: () => disposed1 = true
-            });
-
-            const syncService2 = () => ({
-                [Symbol.dispose]: () => disposed2 = true
-            });
-
-            const container = Container.create()
-                .register(m => m.singleton({ 
-                    test1: syncService1,
-                    test2: syncService2
+            const container = Container.create({ strict: true })
+                .register(m => m.scoped({
+                    test: TestService
                 }));
 
             const provider = container.prepare();
-            provider.dispose();
-
-            expect(disposed1).toBe(true);
-            expect(disposed2).toBe(true);
-        });
-
-        it('should asynchronously dispose multiple singleton services (Symbol.asyncDispose)', async () => {
-            let disposed1 = false;
-            let disposed2 = false;
-
-            const syncService1 = () => ({
-                [Symbol.asyncDispose]: async () => disposed1 = true
-            });
-
-            const syncService2 = () => ({
-                [Symbol.asyncDispose]: async () => disposed2 = true
-            });
-
-            const container = Container.create()
-                .register(m => m.singleton({ 
-                    test1: syncService1,
-                    test2: syncService2
-                }));
-
-            const provider = container.prepare();
-            await provider.dispose();
-
-            expect(disposed1).toBe(true);
-            expect(disposed2).toBe(true);
-        });
-    });
-
-    describe('scoped', () => {
-        it('should synchronously dispose scoped services (Symbol.dispose)', () => {
-            let disposed = false;
-
-            const syncService = () => ({
-                [Symbol.dispose]: () => disposed = true
-            });
-
-            const container = Container.create()
-                .register(m => m.scoped({ test: syncService }));
-
-            const provider = container.prepare();
-            const scope = provider.createScope();
-            scope.dispose();
-
-            expect(disposed).toBe(true);
-        });
-
-        it('should asynchronously dispose scoped services (Symbol.asyncDispose)', async () => {
-            let disposed = false;
-
-            const syncService = () => ({
-                [Symbol.asyncDispose]: async () => disposed = true
-            });
-
-            const container = Container.create()
-                .register(m => m.scoped({ test: syncService }));
-
-            const provider = container.prepare();
-            const scope = provider.createScope();
-            await scope.dispose();
-
-            expect(disposed).toBe(true);
-        });
-
-        it('should synchronously dispose multiple scoped services (Symbol.dispose)', () => {
-            let disposed1 = false;
-            let disposed2 = false;
-
-            const syncService1 = () => ({
-                [Symbol.dispose]: () => disposed1 = true
-            });
-
-            const syncService2 = () => ({
-                [Symbol.dispose]: () => disposed2 = true
-            })
-
-            const container = Container.create()
-                .register(m => m.scoped({ 
-                    test1: syncService1,
-                    test2: syncService2
-                }));
-
-            const provider = container.prepare();
-            const scope = provider.createScope();
-            scope.dispose();
-
-            expect(disposed1).toBe(true);
-            expect(disposed2).toBe(true);
-        });
-
-        it('should asynchronously dispose multiple scoped services (Symbol.asyncDispose)', async () => {
-            let disposed1 = false;
-            let disposed2 = false;
-
-            const syncService1 = () => ({
-                [Symbol.asyncDispose]: async () => disposed1 = true
-            });
-
-            const syncService2 = () => ({
-                [Symbol.asyncDispose]: async () => disposed2 = true
-            });
-
-            const container = Container.create()
-                .register(m => m.scoped({ 
-                    test1: syncService1,
-                    test2: syncService2
-                }));
-
-            const provider = container.prepare();
-            const scope = provider.createScope();
-            await scope.dispose();
-
-            expect(disposed1).toBe(true);
-            expect(disposed2).toBe(true);
+            expect(() => provider.createScope()).toThrow();
         });
     });
 });

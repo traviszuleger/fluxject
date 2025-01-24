@@ -3,39 +3,6 @@
 /** @import { InferRegistrationsFromContainer, InferServiceProvider } from "./types.js" */
 
 /**
- * Basic service that sets a unique uuid as a protected member and all available services from `TContainer` (excluding this service)
- * ```ts
- * class MyService extends Service<typeof container, "test"> {
- * 
- *   myFunction() {
- *     console.log(this.services.x); // will print 55
- *   }
- * 
- * }
- * 
- * const container = Container
- *   .create()
- *   .register(m => m.singleton({ x: 55 }))
- *   .register(m => m.singleton({ test: MyService }));
- * ```
- * @template {Container} TContainer
- * Container type to infer services from
- * @template {Services<TContainer>} TServiceKey
- * Registered service name on the container. (This should be the same name as what it the class is registered as on your container.)
- */
-export class Service {
-    /** @protected */
-    services;
-
-    /**
-     * @param {InferServiceProvider<TContainer, TServiceKey>} services 
-     */
-    constructor(services) {
-        this.services = services;
-    }
-}
-
-/**
  * Type that extracts all registered Service Names from a Container instance.
  * ```ts
  * const container = Container
@@ -88,3 +55,5 @@ export class Service {
  * The service property to use to infer the services for. 
  * @typedef {InferServiceProvider<TContainer, TServiceName>} InferServiceProvider 
  */
+
+export default {};
