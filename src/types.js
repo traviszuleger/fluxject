@@ -157,9 +157,8 @@ export const FluxjectServiceSymbols = Object.freeze({
  * @template {keyof InferRegistrationsFromContainer<TContainer>} TServiceName
  * @template {InferRegistrationsFromContainer<TContainer>[TServiceName]} [TRegistration=GetRegistrationFromContainer<TContainer, TServiceName>]
  * @typedef {InferLifetimeFromRegistration<TRegistration> extends "Transient"|"Singleton"
- *   ? HostServiceProvider<Omit<InferRegistrationsFromContainer<TContainer>, TServiceName>>
- *     & { createScope: () => Widen<Omit<InferRegistrationsFromContainer<TContainer>, TServiceName>> }
- *   : ScopedServiceProvider<Omit<InferRegistrationsFromContainer<TContainer>, TServiceName>>
+ *   ? Widen<Omit<HostServiceProvider<Omit<InferRegistrationsFromContainer<TContainer>, TServiceName>>, keyof FluxjectHostServiceProviderProps<InferRegistrationsFromContainer<TContainer>>>>
+ *   : Widen<Omit<ScopedServiceProvider<Omit<InferRegistrationsFromContainer<TContainer>, TServiceName>>, keyof FluxjectScopedServiceProviderProps<InferRegistrationsFromContainer<TContainer>>>>
  * } InferServiceProvider
  */
 

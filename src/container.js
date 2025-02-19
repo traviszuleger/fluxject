@@ -24,6 +24,9 @@ export {
  * - Scoped: Created once per scope
  * - Transient: Created each time they are requested
  * 
+ * @template {Record<string|symbol, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
+ * Type map of registered services where key is service name and value is Registration.  
+ * __`TRegistrationMap` is inferred from the usage of the `[register()]` function.__
  * @example
  * ```ts
  * import type { InferServiceProvider } from "fluxject";
@@ -74,10 +77,6 @@ export {
  * // Access services from the scope.
  * scope.service3.doSomethingElse();
  * ```
- * 
- * @template {Record<string|symbol, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
- * Type map of registered services where key is service name and value is Registration.  
- * __`TRegistrationMap` is inferred from the usage of the `[register()]` function.__
  */
 export class Container {
     #config;
@@ -191,13 +190,16 @@ export class Container {
      * @param {Registration<any, string, Lifetime>} [currentRegistration=undefined]
      * The registration for the service that was requested by the host service provider.  
      * If undefined, then this function is returning the actual host service provider.
+     * @param {boolean} [includeProviderManagement=true]
+     * Whether to include the provider management functions (`createScope`, `dispose`, etc.) in the host service provider.
      */
     #createHostServiceProvider(
         rSymbols, 
         rSingletonServices, 
         asyncInstantiationPromise=undefined,
         instantiatedSingletonServices=[], 
-        currentRegistration=undefined
+        currentRegistration=undefined,
+        includeProviderManagement=true
     ) {
         // Initialize singleton services.
         for(const key in this.#registrations) {
@@ -221,7 +223,8 @@ export class Container {
                     rSingletonServices,
                     asyncInstantiationPromise,
                     instantiatedSingletonServices,
-                    registration
+                    registration,
+                    false
                 );
 
                 // If the returned type is not a Promise, then immediately define the service in `singletonServices` and continue to the next service.
@@ -356,8 +359,16 @@ export class Container {
                     return undefined;
                 }
 
-                // if the property is in the proxy's object, then return it.
+                // if the requested service is a property of the target (e.g. `dispose`, `createScope`, etc.)
                 if(requestedServiceName in hostServiceProvider) {
+                    // if we are directed to exclude these functions, then return undefined.
+                    if(!includeProviderManagement) {
+                        // if 'strict' mode is enabled, then throw an error.
+                        if(this.#config.strict) {
+                            throw new Error(`Use of [${String(requestedServiceName)}] is not available during instantiation.`);
+                        }
+                        return undefined;
+                    }
                     return hostServiceProvider[requestedServiceName];
                 }
 
@@ -390,7 +401,8 @@ export class Container {
                         rSingletonServices, 
                         asyncInstantiationPromise,
                         instantiatedSingletonServices,
-                        registration
+                        registration,
+                        false
                     );
                     if(!isPromise(maybePromise)) {
                         const service = this.#defineFluxjectSymbolsOnService(maybePromise, registration);
@@ -476,6 +488,7 @@ export class Container {
      * @param {(string|symbol)[]} [instantiatedScopedServices=[]]
      * @param {(string|symbol)[]} [instantiatedSingletonServices=[]]
      * @param {Registration<any, string, Lifetime>} [omittedRegistration=undefined]
+     * @param {boolean} [includeProviderManagement=true]
      */
     #createScopedServiceProvider(
         rSymbols, 
@@ -483,7 +496,8 @@ export class Container {
         rSingletonServices, 
         instantiatedScopedServices=[], 
         instantiatedSingletonServices=[], 
-        omittedRegistration=undefined
+        omittedRegistration=undefined,
+        includeProviderManagement=true
     ) {
         /** @type {Promise<any>|undefined} */
         let asyncInstantiationPromise = undefined;
@@ -515,7 +529,8 @@ export class Container {
                     rSingletonServices,
                     instantiatedScopedServices,
                     instantiatedSingletonServices,
-                    registration
+                    registration,
+                    false
                 );
 
                 // If the returned type is not a Promise, then immediately define the service in `singletonServices` and continue to the next service.
@@ -619,8 +634,16 @@ export class Container {
                     return undefined;
                 }
 
-                // if the property is one of the defined functions on the proxy, then return it.
+                // if the requested service is a property of the target (e.g. `dispose`, etc.)
                 if(requestedServiceName in scopedServiceProvider) {
+                    // if we are directed to exclude these functions, then return undefined.
+                    if(!includeProviderManagement) {
+                        // if 'strict' mode is enabled, then throw an error.
+                        if(this.#config.strict) {
+                            throw new Error(`Use of [${String(requestedServiceName)}] is not available during instantiation.`);
+                        }
+                        return undefined;
+                    }
                     return scopedServiceProvider[requestedServiceName];
                 }
                 

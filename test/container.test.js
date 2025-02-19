@@ -219,5 +219,43 @@ describe('sync services', () => {
             const provider = container.prepare();
             expect(() => provider.createScope()).toThrow();
         });
+
+        it('should throw when attempting to de-reference [createScope] or [dispose] on services from instantiation (strict: false)', () => {
+            let isUndefined = false;
+            class TestService {
+                /**
+                 * 
+                 * @param {import('../src/types.js').InferServiceProvider<typeof container, "test">} services
+                 */
+                constructor(services) {
+                    //@ts-expect-error
+                    const createScope = services.createScope;
+                    //@ts-expect-error
+                    const dispose = services.dispose;
+                    isUndefined = createScope === undefined && dispose === undefined;
+                }
+            }
+
+            const container = Container.create()
+                .register(m => m.singleton({
+                    test: TestService
+                }));
+
+            container.prepare();
+            expect(isUndefined).toBe(true);
+        });
+
+        it('should throw when attempting to de-reference [createScope] or [dispose] on services from instantiation (strict: true)', () => {
+            class TestService {
+                constructor({ createScope, dispose }) { }
+            }
+
+            const container = Container.create({ strict: true })
+                .register(m => m.singleton({
+                    test: TestService
+                }));
+
+            expect(() => container.prepare()).toThrow();
+        });
     });
 });
