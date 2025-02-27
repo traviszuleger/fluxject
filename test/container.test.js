@@ -252,9 +252,12 @@ describe('sync services', () => {
 
             const container = Container.create({ strict: true })
                 .register(m => m.singleton({
+                    /**
+                     * Service that is used as an example in the Fluxject repository.
+                     */
                     test: TestService
                 }));
-
+            
             expect(() => container.prepare()).toThrow();
         });
     });

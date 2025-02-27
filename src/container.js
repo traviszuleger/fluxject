@@ -17,6 +17,14 @@ export {
 };
 
 /**
+ * Create a new Fluxject container instance ready to register services with the provided configuration.
+ * @param {Partial<ContainerConfig>} config - Configuration options for the container
+ */
+export function fluxject(config={}) {
+    return Container.create(config);
+}
+
+/**
  * A dependency injection container that manages the registration, instantiation, lifetime, and injection of services.
  * 
  * The container supports three types of service lifetimes:
@@ -97,11 +105,14 @@ export class Container {
 
     /**
      * @protected
-     * @param {ContainerConfig} config
+     * @param {Partial<ContainerConfig>} config
      * @param {TRegistrationMap} registrations
      */
     constructor(config, registrations) {
-        this.#config = config;
+        this.#config = {
+            strict: false,
+            ...config
+        };
         this.#registrations = registrations;
     }
 

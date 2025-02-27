@@ -1,13 +1,14 @@
 # fluxject
 
-Fluxject is a Simple and Strongly-Typed Dependency Injection library, that allows you to register various lifetime services
-to be accessed throughout your application.
+Fluxject is an IoC strongly-typed dependency injection library that allows you to register various lifetime services to be accessed throughout your application.
 
 __`Fluxject` is young in development, and is prone to errors or unexpected behavior.__  
 __Please submit bugs and feature requests as an issue on the GitHub page.__
 
 ## Table of Contents
 - [General Usage Example](#example)
+- [Instantiation](#instantiation)
+- [Registering Services](#registering-services)
 - [Lifetime](#lifetime)
     - [Scoped Services](#scoped)
     - [Singleton Services](#singleton)
@@ -65,6 +66,123 @@ const database = HostServiceProvider.database;
 //  Created database from {someString}
 ```
 
+## Instantiation
+
+A new Fluxject Container instance to be used for registering services can be created using one of the following methods:
+
+```js
+import { fluxject } from "fluxject";
+
+const container = fluxject({ strict: false })
+    .register(m => m.singleton({
+        test: class Test {}
+    }));
+```
+
+```js
+import { Container } from "fluxject";
+const container = Container.create({ strict: false })
+    .register(m => m.singleton({
+        test: class Test {}
+    }));
+```
+
+```js
+import someName from "fluxject";
+const container = someName({ strict: false })
+    .register(m => m.singleton({
+        test: class Test {}
+    }));
+```
+
+## Registering Services
+
+Fluxject uses a fluent approach to container instantiation, meaning the final resulting container will be the container that you use in your application.
+
+There are multiple methods to instantiate a container (see [Instantiaton](#instantiation) for more) and there are multiple methods to register services on your container. See below for these different methods.
+
+```js
+import { fluxject } from "fluxject";
+
+const container = fluxject()
+    .register(m => m.singleton({
+        // ... all singleton services
+    }))
+    .register(m => m.transient({
+        // ... all transient services
+    }))
+    .register(m => m.scoped({
+        // ... all scoped services
+    }));
+```
+
+```js
+import { fluxject } from "fluxject";
+
+const container = flxuject()
+    .register(m => m.singleton({ test1: () => ({}) }))
+    .register(m => m.singleton({ test2: () => ({}) }))
+    .register(m => m.transient({ test3: () => ({}) }))
+    .register(m => m.scoped({ test4: () => ({}) }))
+    .register(m => m.transient({ test5: () => ({}) }))
+```
+
+```js
+import { fluxject } from "fluxject";
+
+const container = fluxject()
+    .register(m => ({
+        ...(m.singleton({
+            // ... singleton services
+        })),
+        ...(m.transient({
+            // ... transient services
+        })),
+        ...(m.scoped({
+            // ... scoped services
+        }))
+    }));
+```
+
+Additionally, you can add documentation above each declared service, and intellise will detect these comments.
+
+```js
+import { fluxject } from "fluxject";
+
+const container = fluxject()
+    .register(m => m.singleton({
+        /**
+         * Service that is used as an example in the Fluxject repository.
+         */
+        test: class Test { }
+    }));
+```
+
+Now, when referencing the service from the `HostServiceProvider` returned from `container.prepare()`, you will see the comments in intellise.
+
+![image](https://github.com/user-attachments/assets/4db17cb0-f6b6-484e-8bdb-2a2e9581609a)
+
+__NOTE: Do not register your services in-line, ignoring the return type completely, your final `Container` instance will not be typed appropriately, nor will it behave as intended.__
+
+DO:
+```js
+const container = fluxject()
+    .register(/** ... */)
+    .register(/** ... */);
+
+// It's also important not to do this, as your `container` variable will only be of type `Container<{}>` and you'll get errors when trying to set `container.register(/** ... */)` back to itself.
+let container = fluxject();
+container = container.register(/** ... */);
+container = container.register(/** ... */);
+```
+
+DON'T:
+```js
+let container = fluxject();
+container.register(/** ... */);
+container.register(/** ... */);
+```
+
 ## Lifetime
 
 Services can be registered on your container as three different types of Lifetime services:
@@ -90,19 +208,6 @@ const scopedProvider = hostProvider.createScope();
 
 All services that are called from a scoped service's factory or class constructor have access to the `ScopedServiceProvider`.  
 However, it's important to know that only `Scoped` lifetime services have access to other `Scoped` lifetime services.  
-
-Finally, it is worth mentioning that Scoped Services are instantiated only when they are first requested...
-
-Example:
-
-```js
-const scopedProvider = hostProvider.createScope();
-
-scopedProvider.foo; // foo is instantiated and stored into its own scope.
-scopedProvider.foo; // foo is fetched from its own scope
-```
-
-__As of version 1.0.0, this means that the "in" syntax in JavaScript may be inconsistent if the service has not been referenced before__
 
 e.g.,
 ```js
@@ -148,7 +253,7 @@ assert(hostServiceProvider.staticValue === 1);
 
 ### Transient
 
-`Transient` lifetime services will only last as long as the requested service is in scope, or technically, will be instantiated with every request. The only exception to this rule is when a `Transient` lifetime service is accessed from a `ScopedServiceProvider` object.
+`Transient` lifetime services will only last as long as the requested service is in scope, or technically, will be instantiated with every request.
 
 `Transient` lifetime services, on instantiation, only have access to other `Singleton` and `Transient` lifetime services.
 
