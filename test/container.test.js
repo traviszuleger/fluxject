@@ -257,7 +257,6 @@ describe('sync services', () => {
                      */
                     test: TestService
                 }));
-            
             expect(() => container.prepare()).toThrow();
         });
     });
