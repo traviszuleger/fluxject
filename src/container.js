@@ -24,6 +24,9 @@ export {
  * - Scoped: Created once per scope
  * - Transient: Created each time they are requested
  * 
+ * @template {Record<string|symbol, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
+ * Type map of registered services where key is service name and value is Registration.  
+ * __`TRegistrationMap` is inferred from the usage of the `[register()]` function.__
  * @example
  * ```ts
  * import type { InferServiceProvider } from "fluxject";
@@ -74,10 +77,6 @@ export {
  * // Access services from the scope.
  * scope.service3.doSomethingElse();
  * ```
- * 
- * @template {Record<string|symbol, Registration<any, string, Lifetime>>} [TRegistrationMap={}]
- * Type map of registered services where key is service name and value is Registration.  
- * __`TRegistrationMap` is inferred from the usage of the `[register()]` function.__
  */
 export class Container {
     #config;
@@ -91,7 +90,6 @@ export class Container {
     static create(config={}) {
         const containerConfig = {
             strict: false,
-            enablePredefinedProperties: false,
             ...config
         };
         return new Container(containerConfig, {});
@@ -161,31 +159,51 @@ export class Container {
             ...config,
         }, this.#registrations);
 
+        // create a unique id for the singletons store
         const rHostServicesFluxjectId = randomUUID();
+
+        // create a unique id for the host service provider
         const hostServiceFluxjectId = randomUUID();
-        // otherwise, if the requested service is a Singleton or Scoped lifetime service, set the new value.
-        return container.#createHostServiceProvider(container, {
+
+        // create a store for symbols
+        const rSymbols = {
             [FluxjectSymbols.Disposed]: false,
             [FluxjectSymbols.Id]: hostServiceFluxjectId,
             [FluxjectSymbols.ServiceProvider]: "Host Service Provider",
             [FluxjectSymbols.SingletonsStoreId]: rHostServicesFluxjectId,
-        }, {});
+        };
+
+        // create a store for singleton services
+        const rSingletonServices = {
+            [FluxjectSymbols.Id]: rHostServicesFluxjectId
+        };
+
+        // otherwise, if the requested service is a Singleton or Scoped lifetime service, set the new value.
+        return container.#createHostServiceProvider(rSymbols, rSingletonServices);
     }
 
     /**
-     * @param {Container<TRegistrationMap>} container
      * @param {*} rSymbols
      * @param {*} rSingletonServices 
+     * @param {Promise<any>} [asyncInstantiationPromise=undefined]
      * @param {(string|symbol)[]} [instantiatedSingletonServices=[]]
-     * @param {Registration<any, string, Lifetime>} [omittedRegistration=undefined]
+     * @param {Registration<any, string, Lifetime>} [currentRegistration=undefined]
+     * The registration for the service that was requested by the host service provider.  
+     * If undefined, then this function is returning the actual host service provider.
+     * @param {boolean} [includeProviderManagement=true]
+     * Whether to include the provider management functions (`createScope`, `dispose`, etc.) in the host service provider.
      */
-    #createHostServiceProvider(container, rSymbols, rSingletonServices, instantiatedSingletonServices=[], omittedRegistration=undefined) {
-        /** @type {Promise<any>|undefined} */
-        let asyncInstantiationPromise = undefined;
-        
+    #createHostServiceProvider(
+        rSymbols, 
+        rSingletonServices, 
+        asyncInstantiationPromise=undefined,
+        instantiatedSingletonServices=[], 
+        currentRegistration=undefined,
+        includeProviderManagement=true
+    ) {
         // Initialize singleton services.
-        for(const key in container.#registrations) {
-            const registration = container.#registrations[key];
+        for(const key in this.#registrations) {
+            const registration = this.#registrations[key];
 
             // If the registration is not of lifetime singleton, then skip it.
             if(registration.type !== Lifetime.Singleton) {
@@ -200,12 +218,13 @@ export class Container {
             // Instantiate the service
             try {
                 instantiatedSingletonServices.push(registration.name);
-                let maybePromise = container.#createHostServiceProvider(
-                    container,
+                const maybePromise = this.#createHostServiceProvider(
                     rSymbols,
                     rSingletonServices,
+                    asyncInstantiationPromise,
                     instantiatedSingletonServices,
-                    registration
+                    registration,
+                    false
                 );
 
                 // If the returned type is not a Promise, then immediately define the service in `singletonServices` and continue to the next service.
@@ -214,7 +233,7 @@ export class Container {
 
                     // If the instantion of the service is sync, then define the service in `singletonServices` and continue to the next service.
                     if(!isPromise(service)) {
-                        container.#defineFluxjectSymbolsOnService(service, registration);
+                        this.#defineFluxjectSymbolsOnService(service, registration);
                         rSingletonServices[registration.name] = service;
                         continue;                
                     }
@@ -223,7 +242,7 @@ export class Container {
                     if(asyncInstantiationPromise) {
                         asyncInstantiationPromise = asyncInstantiationPromise
                             .then(() => service)
-                            .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
+                            .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
                             .then(service => {
                                 rSingletonServices[registration.name] = service;
                             });
@@ -237,7 +256,7 @@ export class Container {
                     asyncInstantiationPromise = asyncInstantiationPromise
                         .then(() => maybePromise)
                         .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
-                        .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
+                        .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
                         .then(service => {
                             rSingletonServices[registration.name] = service;
                         });
@@ -247,7 +266,7 @@ export class Container {
                 // Or create the promise, since a promise was never created.
                 asyncInstantiationPromise = maybePromise
                     .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
-                    .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
+                    .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
                     .then(service => {
                         rSingletonServices[registration.name] = service;
                     });
@@ -263,15 +282,36 @@ export class Container {
         // Create the hostServiceProvider Proxy object
         const hostServiceProvider = new Proxy(/** @type {any} */ ({
             createScope: () => {
+                // create a unique id for the scoped services store
                 const rScopedServicesFluxjectId = randomUUID();
+
+                // create a unique id for the scoped service provider
                 const scopedServiceFluxjectId = randomUUID();
-                return container.#createScopedServiceProvider({
+                
+                // create a store for symbols
+                const rSymbols = {
                     [FluxjectSymbols.Disposed]: false,
                     [FluxjectSymbols.Id]: scopedServiceFluxjectId,
                     [FluxjectSymbols.ServiceProvider]: "Host Service Provider",
                     [FluxjectSymbols.SingletonsStoreId]: rSingletonServices[FluxjectSymbols.Id],
                     [FluxjectSymbols.ScopesStoreId]: rScopedServicesFluxjectId,
-                }, {}, rSingletonServices);
+                };
+
+                // create a store for scoped services
+                const rScopedServices = {
+                    [FluxjectSymbols.Id]: rScopedServicesFluxjectId,
+                };
+
+                // create an empty array for tracking what scoped services have been instantiated.
+                const instantiatedScopedServices = [];
+                
+                return this.#createScopedServiceProvider(
+                    rSymbols, 
+                    rScopedServices, 
+                    rSingletonServices, 
+                    instantiatedScopedServices, 
+                    instantiatedSingletonServices
+                );
             },
             dispose() {
                 this[FluxjectSymbols.Disposed] = true;
@@ -312,20 +352,28 @@ export class Container {
                 }
 
                 // if the requested service is an omitted registration, then return undefined.
-                if(requestedServiceName === omittedRegistration?.name) {
-                    if(container.#config.strict) {
-                        throw new Error(`Cannot de-reference [${String(omittedRegistration?.name)}] from Host Service Provider as this service would be referencing itself.`);
+                if(requestedServiceName === currentRegistration?.name) {
+                    if(this.#config.strict) {
+                        throw new Error(`Cannot de-reference [${String(currentRegistration?.name)}] from Host Service Provider as this service would be referencing itself.`);
                     }
                     return undefined;
                 }
 
-                // if the property is in the proxy's object, then return it.
+                // if the requested service is a property of the target (e.g. `dispose`, `createScope`, etc.)
                 if(requestedServiceName in hostServiceProvider) {
+                    // if we are directed to exclude these functions, then return undefined.
+                    if(!includeProviderManagement) {
+                        // if 'strict' mode is enabled, then throw an error.
+                        if(this.#config.strict) {
+                            throw new Error(`Use of [${String(requestedServiceName)}] is not available during instantiation.`);
+                        }
+                        return undefined;
+                    }
                     return hostServiceProvider[requestedServiceName];
                 }
 
                 // if the requested service is not registered, then return undefined.
-                if(!(requestedServiceName in container.#registrations)) {
+                if(!(requestedServiceName in this.#registrations)) {
                     if(this.#config.strict) {
                         throw new Error(`Service [${String(requestedServiceName)}] is not registered.`);
                     }
@@ -338,36 +386,44 @@ export class Container {
                 }
 
                 // if the requested service is a scoped service, return undefined (or if strict mode is enabled, throw an error)
-                if(container.#registrations[requestedServiceName].type === Lifetime.Scoped) {
-                    if(container.#config.strict) {
+                if(this.#registrations[requestedServiceName].type === Lifetime.Scoped) {
+                    if(this.#config.strict) {
                         throw new Error(`Scoped registrations cannot be accessed from the HostServiceProvider. (Use the ScopedServiceProvider returned from [createScope()] to access Scoped services.)`);
                     }
                     return undefined;
                 }
                 
                 // Last case: service is transient, so instantiate and return the transient service.
-                const registration = container.#registrations[requestedServiceName];
-                instantiatedSingletonServices.push(registration.name);
-                const maybePromise = container.#createHostServiceProvider(
-                    container,
-                    rSymbols,
-                    rSingletonServices, 
-                    instantiatedSingletonServices,
-                    registration
-                );
-                if(!isPromise(maybePromise)) {
-                    container.#defineFluxjectSymbolsOnService(maybePromise, registration);
-                    return registration.instantiate(maybePromise);
+                try {
+                    const registration = this.#registrations[requestedServiceName];
+                    const maybePromise = this.#createHostServiceProvider(
+                        rSymbols,
+                        rSingletonServices, 
+                        asyncInstantiationPromise,
+                        instantiatedSingletonServices,
+                        registration,
+                        false
+                    );
+                    if(!isPromise(maybePromise)) {
+                        const service = this.#defineFluxjectSymbolsOnService(maybePromise, registration);
+                        return registration.instantiate(service);
+                    }
+                    return maybePromise
+                        .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
+                        .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
+                        .catch(err => {
+                            if(err instanceof RangeError) {
+                                throw new RangeError(`Circular dependency in registration [${String(requestedServiceName)}].`, { cause: err.cause });
+                            }
+                            throw err;
+                        });
                 }
-                return maybePromise
-                    .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
-                    .then(service => container.#defineFluxjectSymbolsOnService(service, registration))
-                    .catch(err => {
-                        if(err instanceof RangeError) {
-                            throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
-                        }
-                        throw err;
-                    });
+                catch(err) {
+                    if(err instanceof RangeError) {
+                        throw new RangeError(`Circular dependency in registration [${String(this.#registrations[requestedServiceName].name)}].`, { cause: err.cause });
+                    }
+                    throw err;
+                }
             },
             set: (hostServiceProvider, requestedServiceName, newValue) => {
                 // special case for FluxjectSymbols.Disposed
@@ -390,7 +446,7 @@ export class Container {
                 }
 
                 // if the requested service not registered, then do nothing and return true.
-                if(!(requestedServiceName in container.#registrations)) {
+                if(!(requestedServiceName in this.#registrations)) {
                     if(this.#config.strict) {
                         throw new Error(`Service [${String(requestedServiceName)}] is not a registered service.`);
                     }
@@ -398,7 +454,7 @@ export class Container {
                 }
 
                 // if the requested service is a Transient lifetime service, then do nothing and return true.
-                if(container.#registrations[requestedServiceName].type === Lifetime.Transient) {
+                if(this.#registrations[requestedServiceName].type === Lifetime.Transient) {
                     return true;
                 }
 
@@ -416,7 +472,7 @@ export class Container {
                 .then(() => hostServiceProvider)
                 .catch(err => {
                     if(err instanceof RangeError) {
-                        throw new RangeError(`Circular dependency detected in registration [${String(omittedRegistration?.name)}].`, { cause: err.cause });
+                        throw new RangeError(`Circular dependency detected in registration [${String(currentRegistration?.name)}].`, { cause: err.cause });
                     }
                     throw err;
                 });
@@ -429,10 +485,20 @@ export class Container {
      * @param {*} rSymbols
      * @param {*} rScopedServices 
      * @param {*} rSingletonServices 
-     * @param {string[]} [instantiatedScopedServices=[]]
+     * @param {(string|symbol)[]} [instantiatedScopedServices=[]]
+     * @param {(string|symbol)[]} [instantiatedSingletonServices=[]]
      * @param {Registration<any, string, Lifetime>} [omittedRegistration=undefined]
+     * @param {boolean} [includeProviderManagement=true]
      */
-    #createScopedServiceProvider(rSymbols, rScopedServices, rSingletonServices, instantiatedScopedServices=[], omittedRegistration=undefined) {
+    #createScopedServiceProvider(
+        rSymbols, 
+        rScopedServices, 
+        rSingletonServices, 
+        instantiatedScopedServices=[], 
+        instantiatedSingletonServices=[], 
+        omittedRegistration=undefined,
+        includeProviderManagement=true
+    ) {
         /** @type {Promise<any>|undefined} */
         let asyncInstantiationPromise = undefined;
 
@@ -457,12 +523,14 @@ export class Container {
             try {
                 // instantiating new service, so add to the list of instantiated services.
                 instantiatedScopedServices.push(registration.name);
-                let maybePromise = this.#createScopedServiceProvider(
+                const maybePromise = this.#createScopedServiceProvider(
                     rSymbols,
                     rScopedServices,
                     rSingletonServices,
                     instantiatedScopedServices,
-                    registration
+                    instantiatedSingletonServices,
+                    registration,
+                    false
                 );
 
                 // If the returned type is not a Promise, then immediately define the service in `singletonServices` and continue to the next service.
@@ -566,8 +634,16 @@ export class Container {
                     return undefined;
                 }
 
-                // if the property is in the proxy's object, then return it.
+                // if the requested service is a property of the target (e.g. `dispose`, etc.)
                 if(requestedServiceName in scopedServiceProvider) {
+                    // if we are directed to exclude these functions, then return undefined.
+                    if(!includeProviderManagement) {
+                        // if 'strict' mode is enabled, then throw an error.
+                        if(this.#config.strict) {
+                            throw new Error(`Use of [${String(requestedServiceName)}] is not available during instantiation.`);
+                        }
+                        return undefined;
+                    }
                     return scopedServiceProvider[requestedServiceName];
                 }
                 
@@ -590,40 +666,36 @@ export class Container {
                 }
 
                 // Last case: service is transient, so instantiate and return the transient service.
-                const registration = this.#registrations[requestedServiceName];
-                let maybePromise;
                 try {
-                    maybePromise = registration.instantiate(
-                        this.#createScopedServiceProvider(
-                            rSymbols,
-                            rScopedServices,
-                            rSingletonServices, 
-                            Object.keys(rSingletonServices), 
-                            registration
-                        )
+                    const registration = this.#registrations[requestedServiceName];
+                    instantiatedSingletonServices.push(registration.name);
+                    const maybePromise = this.#createHostServiceProvider(
+                        rSymbols,
+                        rSingletonServices, 
+                        asyncInstantiationPromise,
+                        instantiatedSingletonServices,
+                        registration
                     );
+                    if(!isPromise(maybePromise)) {
+                        const service = this.#defineFluxjectSymbolsOnService(maybePromise, registration);
+                        return registration.instantiate(service);
+                    }
+                    return maybePromise
+                        .then(hostServiceProvider => registration.instantiate(hostServiceProvider))
+                        .then(service => this.#defineFluxjectSymbolsOnService(service, registration))
+                        .catch(err => {
+                            if(err instanceof RangeError) {
+                                throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
+                            }
+                            throw err;
+                        });
                 }
                 catch(err) {
                     if(err instanceof RangeError) {
-                        throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
+                        throw new RangeError(`Circular dependency in registration [${String(requestedServiceName)}].`, { cause: err.cause });
                     }
                     throw err;
                 }
-                if(!isPromise(maybePromise)) {
-                    this.#defineFluxjectSymbolsOnService(maybePromise, registration);
-                    return maybePromise;
-                }
-                return maybePromise
-                    .then(obj => {
-                        this.#defineFluxjectSymbolsOnService(obj, registration);
-                        return obj;
-                    })
-                    .catch(err => {
-                        if(err instanceof RangeError) {
-                            throw new RangeError(`Circular dependency in registration [${String(registration.name)}].`, { cause: err.cause });
-                        }
-                        throw err;
-                    });
             },
             set: (scopedServiceProvider, requestedServiceName, newValue) => {
                 // special case for FluxjectSymbols.Disposed
@@ -690,14 +762,22 @@ export class Container {
         // if the user has defined the `enablePredefinedProperties` option as true
         // then the properties will be defined as getters to their actual value.
         const timeAtDefinition = Date.now();
-        return {
-            [FluxjectSymbols.Id]: randomUUID(),
-            [FluxjectSymbols.Lifetime]: registration.type,
-            get [FluxjectSymbols.Uptime]() {
-                return TimeSpan.fromMilliseconds(Date.now() - timeAtDefinition);
+        Object.defineProperties(service, {
+            [FluxjectSymbols.Id]: {
+                value: randomUUID(),
+                writable: false
             },
-            ...service
-        }
+            [FluxjectSymbols.Lifetime]: {
+                value: registration.type,
+                writable: false
+            },
+            [FluxjectSymbols.Uptime]: {
+                get() {
+                    return TimeSpan.fromMilliseconds(Date.now() - timeAtDefinition);
+                }
+            }
+        });
+        return service;
     }
 }
 
