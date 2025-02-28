@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 export default defineConfig({
     entry: {
-        index: "./src/index.js"
+        index: "./src2/index.js"
     },
     outDir: 'dist',
     target: 'node22',
