@@ -15,10 +15,10 @@ export class LazyReference {
         this.#value = undefined;
         return new Proxy(this, {
             get: (target,property,receiver) => {
-                if(property === Symbol.dispose || property === Symbol.asyncDispose) {
-                    return undefined;
-                }
                 if(this.#value === undefined) {
+                    if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                        return undefined;
+                    }
                     this.#value = instantiator();
                 }
                 const val = this.#value[property];
@@ -38,10 +38,10 @@ export class LazyReference {
                 return true;
             },
             has: (target,property) => {
-                if(property === Symbol.dispose || property === Symbol.asyncDispose) {
-                    return false;
-                }
                 if(this.#value === undefined) {
+                    if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                        return false;
+                    }
                     this.#value = instantiator();
                 }
                 return property in /** @type {any} */ (this.#value);
