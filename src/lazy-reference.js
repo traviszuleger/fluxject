@@ -18,7 +18,11 @@ export class LazyReference {
                 if(this.#value === undefined) {
                     this.#value = instantiator();
                 }
-                return this.#value[p];
+                const val = this.#value[p];
+                if(val instanceof Function) {
+                    return val.bind(this.#value);
+                }
+                return val;
             },
             set: (t,p,v) => {
                 if(this.#value === undefined) {
