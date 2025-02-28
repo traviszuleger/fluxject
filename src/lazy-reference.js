@@ -14,28 +14,37 @@ export class LazyReference {
     constructor(instantiator) {
         this.#value = undefined;
         return new Proxy(this, {
-            get: (t,p,r) => {
+            get: (target,property,receiver) => {
+                if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                    return undefined;
+                }
                 if(this.#value === undefined) {
                     this.#value = instantiator();
                 }
-                const val = this.#value[p];
+                const val = this.#value[property];
                 if(val instanceof Function) {
                     return val.bind(this.#value);
                 }
                 return val;
             },
-            set: (t,p,v) => {
+            set: (target,property,value) => {
+                if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                    return false;
+                }
                 if(this.#value === undefined) {
                     this.#value = instantiator();
                 }
-                this.#value[p] = v;
+                this.#value[property] = value;
                 return true;
             },
-            has: (t,p) => {
+            has: (target,property) => {
+                if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                    return false;
+                }
                 if(this.#value === undefined) {
                     this.#value = instantiator();
                 }
-                return p in /** @type {any} */ (this.#value);
+                return property in /** @type {any} */ (this.#value);
             },
             getPrototypeOf: () => {
                 if(this.#value === undefined) {
