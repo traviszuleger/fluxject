@@ -66,7 +66,7 @@ export class FluxjectHostServiceProvider {
      * 
      * This will also dispose of all scoped services that have been created by this provider.
      * 
-     * @returns {Types.InferInstanceTypes<TRegistrations, "singleton"|"scoped">[keyof Types.InferInstanceTypes<TRegistrations, "singleton"|"scoped">] extends { [Symbol.asyncDispose]: () => Promise<void> } ? Promise<void> : void }
+     * @returns {keyof Types.Widen<Types.InferUnionOfInstanceTypes<TRegistrations, "singleton"|"scoped">> extends typeof Symbol['asyncDispose'] ? Promise<void> : void}
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
@@ -96,9 +96,10 @@ export class FluxjectHostServiceProvider {
         this.#references = {};
         this.#scopedServices = [];
         if(promises.length > 0) {
+            //@ts-expect-error - This is a valid Promise<void> return intended to suppress the @returns error.
             return Promise.all(promises).then(() => {});
         }
-        //@ts-expect-error - This is a void return intended to suppress the @returns error.
+        //@ts-expect-error - This is a valid void return intended to suppress the @returns error.
         return /** @type {void} */ (undefined);
     }
 }

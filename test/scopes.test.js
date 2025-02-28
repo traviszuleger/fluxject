@@ -152,6 +152,7 @@ describe('scopes', () => {
         }
 
         const container = fluxject()
+            .register(m => m.singleton({ test2: class Test2 { } }))
             .register(m => m.scoped({ test: Test }));
         
         const provider = container.prepare();

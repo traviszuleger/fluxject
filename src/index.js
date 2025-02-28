@@ -84,7 +84,7 @@ export { Container };
  * Infer the Host Service Provider type that would be returned from a container's `prepare` method.
  * @template {Container} TContainer
  * Container to infer the host service provider from
- * @typedef {ReturnType<FluxjectHostServiceProvider<Types.InferRegistrationsFromContainer<TContainer>>['createScope']>} ScopedServiceProvider
+ * @typedef {ReturnType<HostServiceProvider<TContainer>['createScope']>} ScopedServiceProvider
  */
 
 /**

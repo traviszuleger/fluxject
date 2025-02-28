@@ -35,4 +35,10 @@
  * @typedef {TContainer extends Container<infer TRegistrations> ? TRegistrations : never} InferRegistrationsFromContainer
  */
 
+/**
+ * @template {Record<string, Registration<any,any>>} TRegistrations
+ * @template {"scoped"|"transient"|"singleton"} TLifetime
+ * @typedef {InferInstanceTypes<TRegistrations, TLifetime>[keyof InferInstanceTypes<TRegistrations, TLifetime>]} InferUnionOfInstanceTypes
+ */
+
 export default {};
