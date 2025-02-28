@@ -1,5 +1,6 @@
 //@ts-check
 /** @import * as Types from "./types.js" */
+import { isPromise } from "util/types";
 import { LazyReference } from "./lazy-reference.js";
 
 /**
@@ -52,7 +53,7 @@ export class FluxjectHostServiceProvider {
 
     /**
      * Create a new scoped service provider. All Scoped Services will 
-     * @returns {Types.Widen<FluxjectScopedServiceProvider & Types.InferInstanceTypes<TRegistrations>>}
+     * @returns {Types.Widen<FluxjectScopedServiceProvider<TRegistrations> & Types.InferInstanceTypes<TRegistrations>>}
      */
     createScope() {
         const scopedService = /** @type {any} */ (new FluxjectScopedServiceProvider(this, this.#references, this.#registrations));
@@ -64,10 +65,17 @@ export class FluxjectHostServiceProvider {
      * Dispose of all services under this provider.  
      * 
      * This will also dispose of all scoped services that have been created by this provider.
+     * 
+     * @returns {Types.InferInstanceTypes<TRegistrations, "singleton"|"scoped">[keyof Types.InferInstanceTypes<TRegistrations, "singleton"|"scoped">] extends { [Symbol.asyncDispose]: () => Promise<void> } ? Promise<void> : void }
+     * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
+        const promises = [];
         for(const scopedService of this.#scopedServices) {
-            scopedService.dispose();
+            const maybePromise = scopedService.dispose();
+            if(isPromise(maybePromise)) {
+                promises.push(maybePromise);
+            }
         }
         for(const key in this.#references) {
             const service = this.#references[key];
@@ -77,16 +85,27 @@ export class FluxjectHostServiceProvider {
             if(Symbol.dispose in service) {
                 /** @type {any} */ (service[Symbol.dispose])();
             }
+            if(Symbol.asyncDispose in service) {
+                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
+                if(isPromise(maybePromise)) {
+                    promises.push(maybePromise);
+                }
+            }
             delete this.#references[key];
         }
         this.#references = {};
-        this.#registrations = {};
         this.#scopedServices = [];
+        if(promises.length > 0) {
+            return Promise.all(promises).then(() => {});
+        }
+        //@ts-expect-error - This is a void return intended to suppress the @returns error.
+        return /** @type {void} */ (undefined);
     }
 }
 
 /**
  * Internal object used for the Scoped Service Provider
+ * @template {Record<string, Types.Registration<any, any>>} TRegistrations
  */
 export class FluxjectScopedServiceProvider {
     #registrations;
@@ -96,7 +115,7 @@ export class FluxjectScopedServiceProvider {
     /**
      * @param {FluxjectHostServiceProvider} hostProvider 
      * @param {Record<string, LazyReference<any>|undefined>} references 
-     * @param {Record<string, Types.Registration<any,any>>} registrations 
+     * @param {TRegistrations} registrations 
      */
     constructor(hostProvider, references, registrations) {
         /** @type {Record<string, LazyReference<any>|undefined>} */
@@ -130,7 +149,16 @@ export class FluxjectScopedServiceProvider {
         }
     }
 
+    /**
+     * Dispose of all services under this provider.  
+     * 
+     * This will also dispose of all scoped services that have been created by this provider.
+     * 
+     * @returns {Types.InferInstanceTypes<TRegistrations, "scoped">[keyof Types.InferInstanceTypes<TRegistrations, "scoped">] extends { [Symbol.asyncDispose]: () => Promise<void> } ? Promise<void> : void }
+     * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
+     */
     dispose() {
+        let promises = [];
         for(const key in this.#registrations) {
             const service = this.#references[key];
             if(!service) {
@@ -139,10 +167,21 @@ export class FluxjectScopedServiceProvider {
             if(Symbol.dispose in service) {
                 /** @type {any} */ (service[Symbol.dispose])();
             }
+            if(Symbol.asyncDispose in service) {
+                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
+                if(isPromise(maybePromise)) {
+                    promises.push(maybePromise);
+                }
+            }
             delete this.#references[key];
         }
         this.#references = {};
-        this.#registrations = {};
+
+        if(promises.length > 0) {
+            return Promise.all(promises).then(() => {});
+        }
+        //@ts-expect-error - This is a void return intended to suppress the @returns error.
+        return /** @type {void} */ (undefined);
     }
 }
 

@@ -1,6 +1,7 @@
 //@ts-check
 import { describe, it, expect } from 'vitest'
 import { fluxject } from "../src/index.js";
+import { isPromise } from 'util/types';
 
 describe('singletons', () => {
     it('should not instantiate service until the service is de-referenced', () => {
@@ -184,10 +185,10 @@ describe('singletons', () => {
     });
 
     it('should dispose of singleton services when [dispose] is called', () => {
+        let isDisposed = false;
         class Test {
-            isDisposed = false;
             [Symbol.dispose]() {
-                this.isDisposed = true;
+                isDisposed = true;
             }
         }
 
@@ -195,9 +196,30 @@ describe('singletons', () => {
             .register(m => m.singleton({ test: Test }));
         
         const provider = container.prepare();
-        expect(provider.test.isDisposed).toBe(false);
+        expect(isDisposed).toBe(false);
         expect(provider.test).toBeInstanceOf(Test);
         provider.dispose();
+        expect(provider.test).toBe(undefined);
+    });
+
+    it('should asynchronously dispose of singleton services when [dispose] is called', async () => {
+        let isDisposed = false;
+        class Test {
+            async [Symbol.asyncDispose]() {
+                isDisposed = true;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.singleton({ test: Test }));
+        
+        const provider = container.prepare();
+        expect(isDisposed).toBe(false);
+        expect(provider.test).toBeInstanceOf(Test);
+        const result = provider.dispose();
+        expect(isPromise(result)).toBe(true);
+        await result;
+        expect(isDisposed).toBe(true);
         expect(provider.test).toBe(undefined);
     });
 });

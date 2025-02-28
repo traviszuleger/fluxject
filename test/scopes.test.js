@@ -2,6 +2,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { fluxject } from "../src/index.js";
+import { isPromise } from 'util/types';
 
 describe('scopes', () => {
     it('should not instantiate service until the service is de-referenced', () => {
@@ -81,10 +82,10 @@ describe('scopes', () => {
     });
 
     it('should dispose of scoped services when [dispose] on scoped service provider is called', () => {
+        let isDisposed = false;
         class Test {
-            isDisposed = false;
             [Symbol.dispose]() {
-                this.isDisposed = true;
+                isDisposed = true;
             }
         }
 
@@ -93,17 +94,18 @@ describe('scopes', () => {
         
         const provider = container.prepare();
         const scope = provider.createScope();
-        expect(scope.test.isDisposed).toBe(false);
+        expect(isDisposed).toBe(false);
         expect(scope.test).toBeInstanceOf(Test);
         scope.dispose();
+        expect(isDisposed).toBe(true);
         expect(scope.test).toBe(undefined);
     });
 
     it('should dispose of scoped services when [dispose] on host service provider is called', () => {
+        let isDisposed = false;
         class Test {
-            isDisposed = false;
             [Symbol.dispose]() {
-                this.isDisposed = true;
+                isDisposed = true;
             }
         }
 
@@ -112,9 +114,54 @@ describe('scopes', () => {
         
         const provider = container.prepare();
         const scope = provider.createScope();
-        expect(scope.test.isDisposed).toBe(false);
+        expect(isDisposed).toBe(false);
         expect(scope.test).toBeInstanceOf(Test);
         provider.dispose();
+        expect(isDisposed).toBe(true);
+        expect(scope.test).toBe(undefined);
+    });
+
+    it('should asynchronously dispose of scoped services when [dispose] on scoped service provider is called', async () => {
+        let isDisposed = false;
+        class Test {
+            async [Symbol.asyncDispose]() {
+                isDisposed = true;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.scoped({ test: Test }));
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+        expect(isDisposed).toBe(false);
+        expect(scope.test).toBeInstanceOf(Test);
+        const result = scope.dispose();
+        expect(isPromise(result)).toBe(true);
+        await result;
+        expect(isDisposed).toBe(true);
+        expect(scope.test).toBe(undefined);
+    });
+
+    it('should asynchronously dispose of scoped services when [dispose] on host service provider is called', async () => {
+        let isDisposed = false;
+        class Test {
+            async [Symbol.asyncDispose]() {
+                isDisposed = true;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.scoped({ test: Test }));
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+        expect(isDisposed).toBe(false);
+        expect(scope.test).toBeInstanceOf(Test);
+        const result = provider.dispose();
+        expect(isPromise(result)).toBe(true);
+        await result;
+        expect(isDisposed).toBe(true);
         expect(scope.test).toBe(undefined);
     });
 });

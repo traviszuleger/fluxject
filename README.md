@@ -295,6 +295,12 @@ const TransientService = hostProvider.TransientService;
 
 You can provide the pre-defined `Symbol.dispose` symbol on a service that can be disposed at any given time if you call the `[dispose()]` method on the service provider you are intending to dispose of.  
 
+Alternatively, if your service must be disposed of in an asynchronous manner, you can define the pre-defined `Symbol.asyncDispose` and the `[dispose()]` method will be inferred to return a Promise.  
+  - If there is at least one `Singleton` service with `Symbol.asyncDispose` defined, then the scoped service provider's `[dispose()]` function will return a `Promise`.
+    - Reminder: The scoped service provider is the provider returned from `HostServiceProvider#createScope`
+  - If there is at least one `Singleton` OR `Scoped` service with `Symbol.asyncDispose` defined, then the host service provider's `[dispose()]` function will return a `Promise`.
+    - Reminder: The host service provider is the provider returned from `Container#prepare`
+
 Both a `HostServiceProvider` and `ScopedServiceProvider` will have the `[dispose()]` method.  
 
 When `[dispose()]` is called on the `HostServiceProvider`, all `Singleton` services will be disposed. Additionally, all `ScopedServiceProviders` that have been created will also be disposed of.  
@@ -328,11 +334,49 @@ const container = Container.create()
     .register(m => m.scoped({ myScopedService }));
 
 const hostServiceProvider = container.prepare();
-hostServiceProvider.dispose();
-// nothing will print, the [dispose()] function on the hostServiceProvider will only dispose of Singleton services.
-
 const scopedServiceProvider = hostServiceProvider.createScope();
 scopedServiceProvider.myScopedService.toString(); // This would only be to lazily instantiate the service.
 scopedServiceProvider.dispose();
 // will print "disposed myScopedService"
+
+// if you invoke [dispose] on the hostServiceProvider...
+hostServiceProvider.dispose();
+// will print "asynchronously disposed myScopedService" (would print n times, where n is the number of times createScope was called)
+```
+
+Example of adding `[Symbol.asyncDispose]` on a `Singleton` service:
+
+```js
+const mySingletonService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed mySingletonService`) });
+const container = Container.create()
+    .register(m => m.singleton({ mySingletonService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.mySingletonService.toString(); // This would only be to lazily instantiate the service.
+const result = hostServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await result; 
+// will print "asynchronously disposed mySingletonService"
+```
+
+Example of adding `[Symbol.asyncDispose]` on a `Scoped` service:
+
+```js
+const myScopedService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed myScopedService`) });
+const container = Container.create()
+    .register(m => m.scoped({ myScopedService }));
+
+const hostServiceProvider = container.prepare();
+const scopedServiceProvider = hostServiceProvider.createScope();
+scopedServiceProvider.myScopedService.toString(); // This would only be to lazily instantiate the service.
+const result = scopedServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await result;
+// will print "asynchronously disposed myScopedService"
+
+// if you invoke [dispose] on the hostServiceProvider...
+const hostResult = hostServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await hostResult;
+// will print "asynchronously disposed myScopedService" (would print n times, where n is the number of times createScope was called)
 ```
