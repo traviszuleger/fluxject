@@ -3,103 +3,129 @@
 Fluxject is an IoC strongly-typed dependency injection library that allows you to register various lifetime services to be accessed throughout your application.
 
 __`Fluxject` is young in development, and is prone to errors or unexpected behavior.__  
+
 __Please submit bugs and feature requests as an issue on the GitHub page.__
 
 ## Table of Contents
-- [General Usage Example](#example)
-- [Instantiation](#instantiation)
+- [Getting Started](#getting-started)
 - [Registering Services](#registering-services)
 - [Lifetime](#lifetime)
     - [Scoped Services](#scoped)
     - [Singleton Services](#singleton)
     - [Transient Services](#transient)
-- [Asynchronous Services](#async)
-    - [Type Safety](#type-safety)
-    - [Examples](#examples)
 - [Disposal of Services](#dispose)
     - [Type Safety](#type-safety-1)
     - [Examples](#examples-1)
 
-## Example
+## Getting Started
 
-```js
-import type { InferServiceProvider, HostServiceProvider, ScopedServiceProvider } from "fluxject";
-import { Container } from "fluxject";
-import { createDatabase } from "./my-database-provider.js";
-
-const container = Container.create()
-  .register(m => m.singleton({ connectionString: process.env.CONNECTION_STRING }))
-  .register(m => m.singleton({ database: createDatabaseProvider }))
-  .register(m => m.singleton({ log: createLogProvider }))
-  .register(m => m.scoped({ cache: VolatileCache }));
-
-const HostServiceProvider = container.prepare();
-
-function createDatabaseProvider(services: InferServiceProvider<typeof container, "database">) {
-    const db = createDatabase(services.connectionString);
-    // Don't actually print a connection string in your app
-    services.log.info("Created database from " + services.connectionString); 
-    return db;
-}
-
-function createLogProvider(services: InferServiceProvider<typeof container, "log">) {
-    console.log("Created Log Provider");
-    return {
-        warning: (msg) => {
-            console.log(`[W]: ${msg}`);
-        },
-        info: (msg) => {
-            console.log(`[I]: ${msg}`);
-        }
-    }
-}
-
-class VolatileCache {
-    constructor(services: services: InferServiceProvider<typeof container, "cache">) {
-        services.log.info("Created volatile cache");
-    }
-}
-
-const database = HostServiceProvider.database;
-// CLI will print:
-//  Created Log Provider
-//  Created database from {someString}
-```
-
-## Instantiation
-
-A new Fluxject Container instance to be used for registering services can be created using one of the following methods:
-
-```js
+```ts
+import type { InferServiceProvider } from "fluxject";
 import { fluxject } from "fluxject";
 
-const container = fluxject({ strict: false })
+class DatabaseProvider {
+    #secrets;
+    constructor({ secrets }: InferServiceProvider<typeof container, "database">) {
+        this.#secrets = secrets;
+        console.log(`Created DatabaseProvider!`);
+    }
+
+    async getUser(id: string) {
+        // ...
+    }
+
+    async insertUser() {
+        // ...
+    }
+
+    async updateUser() {
+
+    }
+}
+
+class SecretsProvider {
+    databaseConnectionString = process.env.CONNECTION_STRING;
+
+    constructor() {
+        console.log(`Created SecretsProvider!`);
+    }
+}
+
+class User {
+    id: string;
+    firstName: string;
+    lastName: string;
+
+    #database;
+
+    constructor({ database }: InferServiceProvider<typeof container, "user">) {
+        this.#database = database;
+        console.log(`Created User!`);
+    }
+
+    async update() {
+        await this.#database.updateUser({
+            id: this.id,
+            firstName: this.firstName,
+            lastName: this.lastName
+        });
+    }
+}
+
+const container = fluxject()
     .register(m => m.singleton({
-        test: class Test {}
+        secrets: SecretsProvider
+    }))
+    .register(m => m.transient({
+        database: DatabaseProvider
+    }))
+    .register(m => m.scoped({
+        user: User
     }));
+
+const provider = container.prepare();
+const scope = container.createScope();
+
+console.log(`Getting user...`);
+const user = await provider.getUser("123");
+console.log(`Got user!`);
+scope.user.id = user.id;
+scope.user.firstName = user.firstName;
+scope.user.lastName = user.lastName;
+console.log(`Set user!`);
 ```
 
-```js
-import { Container } from "fluxject";
-const container = Container.create({ strict: false })
-    .register(m => m.singleton({
-        test: class Test {}
-    }));
+The command line output of the above code:
+
+```console
+Getting user...
+Created SecretsProvider!
+Created DatabaseProvider!
+Got user!
+Created User!
+Set user!
 ```
 
-```js
-import someName from "fluxject";
-const container = someName({ strict: false })
-    .register(m => m.singleton({
-        test: class Test {}
-    }));
-```
+This app creates a `DatabaseProvider`, a `SecretsProvider`, and a `User` upon requests of the service on the prepared service provider.  
+
+A few things to note here:
+  - The return type of `.register()` returns a new container, meaning you __MUST__ use the final returned container as your source container throughout your application.
+  - All services have access to other services within the scope of their respective lifetime. 
+    - `Singleton` services only have access to other `Singleton` services and all `Transient` services.
+    - `Transient` services only have access to other `Transient` services and all `Singleton` services.
+    - `Scoped` services have access to all registered services. 
+  - Fluxject supports lazy instantiation, meaning your services will never be instantiated unless they are explicitly used.
+    - An example of "explicitly using" a service would be something like de-referencing a property on your service.
+  - Circular dependencies are still a risk. Fluxject attempts to mitigate the chances of circular dependencies, but they will always exist. 
+    - Circular dependencies will occur if you attempt to use a service (Service A) within another service (Service B), and the other service (Service B) attempts to use the first service (Service A). 
+    - This can be prevented by deferring any usage of the services until after the factory method or constructor returns.  
+
 
 ## Registering Services
 
 Fluxject uses a fluent approach to container instantiation, meaning the final resulting container will be the container that you use in your application.
 
-There are multiple methods to instantiate a container (see [Instantiaton](#instantiation) for more) and there are multiple methods to register services on your container. See below for these different methods.
+There are multiple methods to register services on your container. See below for these different methods.
 
 ```js
 import { fluxject } from "fluxject";
@@ -164,7 +190,7 @@ Now, when referencing the service from the `HostServiceProvider` returned from `
 
 __NOTE: Do not register your services in-line, ignoring the return type completely, your final `Container` instance will not be typed appropriately, nor will it behave as intended.__
 
-DO:
+__DO THIS:__
 ```js
 const container = fluxject()
     .register(/** ... */)
@@ -176,7 +202,7 @@ container = container.register(/** ... */);
 container = container.register(/** ... */);
 ```
 
-DON'T:
+__DO NOT DO THIS:__
 ```js
 let container = fluxject();
 container.register(/** ... */);
@@ -188,7 +214,7 @@ container.register(/** ... */);
 Services can be registered on your container as three different types of Lifetime services:
  - `Scoped`: Lifetime of this service will last as long as it is in scope.
    - Changes to scoped service properties will persist.
- - `Singleton`: Lifetime of this service will last as long as the application is running.
+ - `Singleton`: Lifetime of this service will last as long as the host service provider is in scope. (Typically as long as the application is running)
    - Changes to singleton service values and service properties will persist.
  - `Transient`: Lifetime of this service is volatile, and will only last as long as the request.
    - Changes to the transient service properties will persist, but the service itself is not stored on the service provider.
@@ -206,21 +232,6 @@ const scopedProvider = hostProvider.createScope();
 
 `Scoped` lifetime services will only last as long as the `ScopedServiceProvider` type object remains in scope.  
 
-All services that are called from a scoped service's factory or class constructor have access to the `ScopedServiceProvider`.  
-However, it's important to know that only `Scoped` lifetime services have access to other `Scoped` lifetime services.  
-
-e.g.,
-```js
-const scopedProvider = hostProvider.createScope();
-
-const isFooInScope_before = "foo" in scopedProvider;
-scopedProvider.foo; // foo is instantiated and stored into its own scope.
-const isFooInScope_after = "foo" in scopedProvider;
-
-console.log(isFooInScope_before, isFooInScope_after);
-// will print "false true"
-```
-
 ### Singleton
 
 `Singleton` lifetime services will last as long as the application's lifetime, meaning that once you call `.prepare()`, the singleton service will be instantiated and will remain as such until your programs quits (or, technically, once the return value from `.prepare()` leaves scope)
@@ -231,7 +242,6 @@ Here is an example of registering a `Singleton` lifetime service:
 
 ```ts
 const container = Container.create()
-    .register(m => m.singleton({ staticValue: 0 }))
     .register(m => m.singleton({ staticObject: (services: InferServiceProvider<typeof container, "staticObject">) => ({}) }))
     .register(m => m.singleton({ staticClassObject: SingletonService: }));
 
@@ -240,15 +250,6 @@ class SingletonService {
 
     }
 }
-```
-
-You can alter a singleton's properties (or value if the value passed was a constant value) at any time, and the state of that service (value or object) will persist so long as the `HostServiceProvider` object exists.
-
-```ts
-// ...
-const hostServiceProvider = container.prepare();
-hostServiceProvider.staticValue++;
-assert(hostServiceProvider.staticValue === 1);
 ```
 
 ### Transient
@@ -261,7 +262,6 @@ Here is an example of instantiating a `Transient` lifetime service:
 
 ```ts
 const container = Container.create()
-    .register(m => m.transient({ Value: 0 }))
     .register(m => m.transient({ Object: (services: InferServiceProvider<typeof container, "Object">) => ({}) }))
     .register(m => m.transient({ ClassObject: TransientService }));
 
@@ -277,8 +277,6 @@ And here is an example of how it is used
 ```js
 // ...
 const hostProvider = container.prepare();
-hostProvider.Value++;
-console.log(hostProvider.Value); // will print 0
 hostProvider.Object.x = 2;
 console.log(hostProvider.Object); // will print {}
 hostProvider.TransientService; // will print "Created TransientService!"
@@ -293,133 +291,25 @@ const TransientService = hostProvider.TransientService;
 // now, TransientService can be used throughout the rest of its own lifetime without it being re-instantiated.
 ```
 
-## Async
-
-As of v1.1, you can provide factory functions that yield a `Promise` type as a return value (or as a constant value) which can be resolved by `await`ing the `[prepare()]` or `[createScope()]` functions on your container.
-
-__It is important to note that `Transient` lifetime services that return `Promise`s will not be awaited and resolved. `Transient` lifetime services will always return a `Promise` which then must be explicitly awaited.__
-
-### Type Safety
-
-When a registered service returns a `Promise`, Fluxject will infer the return type of the `[prepare()]` and/or the `[createScope()]` functions to correctly be a `Promise` or not. 
-
-The return type will be a `HostServiceProvider` type for `[prepare()]` and `ScopedServiceProvider` type for `[createScope()]` when no asynchronous services are registered under the respective lifetimes.
-
-The return type will be a `Promise<HostServiceProvider>` type for `[prepare()]` and `Promise<ScopedServiceProvider>` type for `[createScope()]` when any asynchronous services are registered under the respective lifetimes.
-
-### Examples
-
-Example of registering an asynchronous `Singleton` service:
-
-```ts
-const mySyncSingletonService = () => ({ test: () => `test sync` });
-const myAsyncSingletonService = async () => ({ test: () => `test async` });
-const container = Container.create()
-    .register(m => m.singleton({ mySyncSingletonService }))
-    .register(m => m.singleton({ myAsyncSingletonService }));
-
-const unawaitedHostServiceProvider = container.prepare();
-// This WILL fail as the type of `unawaitedHostServiceProvider` will actually be a Promise.
-console.log(unawaitedHostServiceProvider.mySyncSingletonService.test()); 
-
-// instead... do this!
-const awaitedHostServiceProvider = await container.prepare();
-console.log(awaitedHostServiceProvider.mySyncSingletonService.test()); // will print "test sync"
-console.log(awaitedHostServiceProvider.myAsyncSingletonService.test()); // will print "test async"
-
-// but it's important to know, that if we chose not to have an asynchronous singleton, 
-// then nothing will change from the original behavior of Fluxject pre v1.1
-// (AND it's strongly typed-- the return type will be inferred as a Promise, only if an Async Singleton Service was registered)
-const nonAsyncContainer = Container.create()
-    .register(m => m.singleton({ mySyncSingletonService }));
-
-const hostServiceProvider = container.prepare();
-hostServiceProvider.mySyncSingletonService.test(); // will print "test sync"
-```
-
-Example of registering an asynchronous `Transient` service:
-
-```js
-const mySyncTransientService = () => ({ test: () => `test sync` });
-const myAsyncTransientService = async () => ({ test: () => `test async` });
-const container = Container.create()
-    .register(m => m.transient({ mySyncTransientService }))
-    .register(m => m.transient({ myAsyncTransientService }));
-
-// Since Transient services are instantiated on demand, 
-// there is no way for [.prepare()] to resolve the returned Promises from Transient services
-const hostServiceProvider = container.prepare();
-
-// so, as you would expect, the return type from these instantiated Transient services will be a Promise
-const test = await hostServiceProvider.myAsyncTransientService;
-test();
-// or
-(await hostServiceProvider.myAsyncTransientService).test(); // will print "test async"
-// just remember, that every time you de-reference an asynchronous Transient service from the service provider
-// you must await the returned value, as Transient services are always instantiated on demand, meaning a brand new Promise will always be returned.
-
-// and thus, synchronous Transient services will have the same behavior as pre v1.1 of Fluxject
-hostServiceProvider.mySyncTransientService.test(); // will print "test sync" 
-```
-
-Example of registering an asynchronous `Scoped` service:
-
-```js
-const mySyncScopedService = () => ({ test: () => `test sync` });
-const myAsyncScopedService = async () => ({ test: () => `test async` });
-const container = Container.create()
-    .register(m => m.singleton({ mySyncSingletonService: () => `test singleton sync` }))
-    .register(m => m.scoped({ mySyncScopedService }))
-    .register(m => m.scoped({ myAsyncScopedService }));
-
-const unawaitedHostServiceProvider = container.prepare();
-// This is still valid! We did not register any asynchronous Singleton services, so [prepare()] will not return a Promise. 
-console.log(unawaitedHostServiceProvider.mySyncSingletonService.test()); // will print "test singleton sync"
-
-// but, since we have asynchronous Scoped variables...
-
-const unawaitedScopedServiceProvider = unawaitedHostServiceProvider.createScope();
-
-// This WILL fail, since the [createScope()] function will return a Promise.
-unawaitedScopedServiceProvider.test(); // error
-
-// instead... do this!
-const awaitedScopedServiceProvider = await container.createScope();
-console.log(awaitedHostServiceProvider.mySyncScopedService.test()); // will print "test sync"
-console.log(awaitedHostServiceProvider.myAsyncScopedService.test()); // will print "test async"
-
-// and just like Singleton services, if no asynchronous Scoped service was provided, then the return type of [createScope()]
-// will not be a Promise
-
-const nonAsyncContainer = Container.create()
-    .register(m => m.scoped({ mySyncScopedService }));
-
-const hostServiceProvider = nonAsyncContainer.prepare();
-const scopedServiceProvider = hostServiceProvider.createScope();
-console.log(scopedServiceProvider.mySyncScopedService.test()); // will print "test sync"
-```
-
 ## Dispose
 
-As of v1.1, you can provide the pre-defined `Symbol.dispose` or `Symbol.asyncDispose` on a service that can be disposed at any given time if you call the `[dispose()]` on the service provider you are intending to dispose of.  
+You can provide the pre-defined `Symbol.dispose` symbol on a service that can be disposed at any given time if you call the `[dispose()]` method on the service provider you are intending to dispose of.  
 
-Both a `HostServiceProvider` and `ScopedServiceProvider` will have the `[dispose()]` function. When the `[dispose()]` function is called on the `HostServiceProvider`, All `Singleton` services will be disposed  
+Alternatively, if your service must be disposed of in an asynchronous manner, you can define the pre-defined `Symbol.asyncDispose` and the `[dispose()]` method will be inferred to return a Promise.  
+  - If there is at least one `Singleton` service with `Symbol.asyncDispose` defined, then the scoped service provider's `[dispose()]` function will return a `Promise`.
+    - Reminder: The scoped service provider is the provider returned from `HostServiceProvider#createScope`
+  - If there is at least one `Singleton` OR `Scoped` service with `Symbol.asyncDispose` defined, then the host service provider's `[dispose()]` function will return a `Promise`.
+    - Reminder: The host service provider is the provider returned from `Container#prepare`
+
+Both a `HostServiceProvider` and `ScopedServiceProvider` will have the `[dispose()]` method.  
+
+When `[dispose()]` is called on the `HostServiceProvider`, all `Singleton` services will be disposed. Additionally, all `ScopedServiceProviders` that have been created will also be disposed of.  
+
+When `[dispose()]` is called on the `ScopedServiceProvider`, all `Scoped` services on that provider will be disposed.
 
 This functionality allows for easy clean-up of Singleton and Scoped services without having to explicitly clean up the service yourself.
 
 __Please note that this functionality ONLY exists for Singleton and Scoped services, there is unfortunately no way of knowing when a Transient service has left scope without the usage of TypeScript's `using` keyword.__
-
-### Type Safety
-
-When a registered service has the `[Symbol.asyncDispose]` unique symbol defined on the return type of the service, Fluxject will infer the return type for `[dispose()]` function to correctly be a Promise or not.
-
-The return type of `<HostServiceProvider>.dispose()` will be `void` when no registered `Singleton` services have the `[Symbol.asyncDispose]` function defined on them.  
-
-The return type of `<HostServiceProvider>.dispose()` will be `Promise<void>` when at least one registered `Singleton` service has the `[Symbol.asyncDispose]` function defined on them.
-
-The return type of `<ScopedServiceProvider>.dispose()` will be `void` when no registered `Scoped` services have the `[Symbol.asyncDispose]` function defined on them.  
-
-The return type of `<ScopedServiceProvider>.dispose()` will be `Promise<void>` when at least one registered `Scoped` service has the `[Symbol.asyncDispose]` function defined on them.
 
 ### Examples
 
@@ -431,26 +321,9 @@ const container = Container.create()
     .register(m => m.singleton({ mySingletonService }));
 
 const hostServiceProvider = container.prepare();
+hostServiceProvider.mySingletonService.toString(); // This would only be to lazily instantiate the service.
 hostServiceProvider.dispose();
 // will print "disposed mySingletonService"
-```
-
-Example of adding `[Symbol.asyncDispose]` on a `Singleton` service:
-
-```js
-const mySingletonService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed mySingletonService`) });
-const container = Container.create()
-    .register(m => m.singleton({ mySingletonService }));
-
-const hostServiceProvider = container.prepare();
-const returnedValue = hostServiceProvider.dispose();
-
-if("then" in returnedValue) {
-    await returnedValue;
-    // will print "asynchronously disposed mySingletonService"
-    console.log(`All done disposing!`);
-    // will print "All done disposing!"
-}
 ```
 
 Example of adding `[Symbol.dispose]` on a `Scoped` service:
@@ -461,32 +334,49 @@ const container = Container.create()
     .register(m => m.scoped({ myScopedService }));
 
 const hostServiceProvider = container.prepare();
-hostServiceProvider.dispose();
-// nothing will print, the [dispose()] function on the hostServiceProvider will only dispose of Singleton services.
-
 const scopedServiceProvider = hostServiceProvider.createScope();
+scopedServiceProvider.myScopedService.toString(); // This would only be to lazily instantiate the service.
 scopedServiceProvider.dispose();
 // will print "disposed myScopedService"
+
+// if you invoke [dispose] on the hostServiceProvider...
+hostServiceProvider.dispose();
+// will print "asynchronously disposed myScopedService" (would print n times, where n is the number of times createScope was called)
+```
+
+Example of adding `[Symbol.asyncDispose]` on a `Singleton` service:
+
+```js
+const mySingletonService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed mySingletonService`) });
+const container = Container.create()
+    .register(m => m.singleton({ mySingletonService }));
+
+const hostServiceProvider = container.prepare();
+hostServiceProvider.mySingletonService.toString(); // This would only be to lazily instantiate the service.
+const result = hostServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await result; 
+// will print "asynchronously disposed mySingletonService"
 ```
 
 Example of adding `[Symbol.asyncDispose]` on a `Scoped` service:
 
 ```js
-const myScopedService = () => ({ [Symbol.asyncDispose]: () => console.log(`asynchronously disposed myScopedService`) });
+const myScopedService = () => ({ [Symbol.asyncDispose]: async () => console.log(`asynchronously disposed myScopedService`) });
 const container = Container.create()
     .register(m => m.scoped({ myScopedService }));
 
 const hostServiceProvider = container.prepare();
-hostServiceProvider.dispose(); // return type will be void
-// nothing will print, the [dispose()] function on the hostServiceProvider will only dispose of Singleton services.
-
 const scopedServiceProvider = hostServiceProvider.createScope();
-const returnedValue = scopedServiceProvider.dispose();
+scopedServiceProvider.myScopedService.toString(); // This would only be to lazily instantiate the service.
+const result = scopedServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await result;
+// will print "asynchronously disposed myScopedService"
 
-if("then" in returnedValue) {
-    await returnedValue;
-    // will print "asynchronously disposed myScopedService"
-    console.log(`All done disposing!`);
-    // will print "All done disposing!"
-}
+// if you invoke [dispose] on the hostServiceProvider...
+const hostResult = hostServiceProvider.dispose();
+console.log(isPromise(result)); // will print "true"
+await hostResult;
+// will print "asynchronously disposed myScopedService" (would print n times, where n is the number of times createScope was called)
 ```
