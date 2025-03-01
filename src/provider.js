@@ -8,6 +8,7 @@ import { LazyReference } from "./lazy-reference.js";
  * @template {Record<string, Types.Registration<any, any>>} TRegistrations
  */
 export class FluxjectHostServiceProvider {
+    #disposed;
     #registrations;
     /** @type {Record<string, LazyReference<any>|undefined>} */
     #references;
@@ -17,6 +18,7 @@ export class FluxjectHostServiceProvider {
      * @param {TRegistrations} registrations
      */
     constructor(registrations) {
+        this.#disposed = false;
         this.#scopedServices = [];
         /** @type {Record<string, LazyReference<any>|undefined>} */
         const newReferences = Object.fromEntries(Object.entries(registrations)
@@ -70,6 +72,10 @@ export class FluxjectHostServiceProvider {
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
+        if(this.#disposed) {
+            return /** @type {void} */ (undefined);
+        }
+        this.#disposed = true;
         const promises = [];
         for(const scopedService of this.#scopedServices) {
             const maybePromise = scopedService.dispose();
@@ -108,6 +114,7 @@ export class FluxjectHostServiceProvider {
  * @template {Record<string, Types.Registration<any, any>>} TRegistrations
  */
 export class FluxjectScopedServiceProvider {
+    #disposed;
     #registrations;
     /** @type {Record<string, LazyReference<any>|undefined>} */
     #references;
@@ -160,6 +167,10 @@ export class FluxjectScopedServiceProvider {
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
+        if(this.#disposed) {
+            return /** @type {void} */ (undefined);
+        }
+        this.#disposed = true;
         let promises = [];
         for(const key in this.#registrations) {
             const service = this.#references[key];
