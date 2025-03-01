@@ -161,6 +161,20 @@ export class FluxjectScopedServiceProvider {
      */
     dispose() {
         let promises = [];
+        // This bug occurs when someone tries to call `dispose` from a receiver other than the original provider.
+        // An example of this would be like: `return provider.dispose` instead of `return () => provider.dispose()`.
+        try {
+            this.#registrations;
+        }
+        catch(err) {
+            if(err instanceof TypeError 
+                && err.message.startsWith("Cannot read properties of undefined")
+            ) {
+                throw new Error("Cannot call dispose from receiver other than the original provider. (If you are passing [{provider}.dispose] around, then try using [() => {provider}.dispose()] instead)");
+            }
+            throw err;
+        }
+
         for(const key in this.#registrations) {
             const service = this.#references[key];
             if(!service) {
