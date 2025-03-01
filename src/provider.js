@@ -66,7 +66,7 @@ export class FluxjectHostServiceProvider {
      * 
      * This will also dispose of all scoped services that have been created by this provider.
      * 
-     * @returns {keyof Types.Widen<Types.InferUnionOfInstanceTypes<TRegistrations, "singleton"|"scoped">> extends typeof Symbol['asyncDispose'] ? Promise<void> : void}
+     * @returns {keyof {[K in keyof Types.InferInstanceTypes<TRegistrations, "scoped"> as Types.InferInstanceTypes<TRegistrations, "scoped">[K] extends { [Symbol.asyncDispose]: () => Promise<void> } ? K : never]: undefined} extends never ? void : Promise<void>}
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
@@ -99,7 +99,6 @@ export class FluxjectHostServiceProvider {
             //@ts-expect-error - This is a valid Promise<void> return intended to suppress the @returns error.
             return Promise.all(promises).then(() => {});
         }
-        //@ts-expect-error - This is a valid void return intended to suppress the @returns error.
         return /** @type {void} */ (undefined);
     }
 }
@@ -132,7 +131,9 @@ export class FluxjectScopedServiceProvider {
             }
             throw new Error(`Unknown lifetime ${registration.lifetime}`);
         }));
-        this.#registrations = registrations;
+        this.#registrations = {
+            ...registrations
+        };
         this.#references = { 
             ...references,
             ...newReferences
@@ -155,7 +156,7 @@ export class FluxjectScopedServiceProvider {
      * 
      * This will also dispose of all scoped services that have been created by this provider.
      * 
-     * @returns {Types.InferInstanceTypes<TRegistrations, "scoped">[keyof Types.InferInstanceTypes<TRegistrations, "scoped">] extends { [Symbol.asyncDispose]: () => Promise<void> } ? Promise<void> : void }
+     * @returns {keyof {[K in keyof Types.InferInstanceTypes<TRegistrations, "scoped"> as Types.InferInstanceTypes<TRegistrations, "scoped">[K] extends { [Symbol.asyncDispose]: () => Promise<void> } ? K : never]: undefined} extends never ? void : Promise<void>}
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
@@ -179,9 +180,9 @@ export class FluxjectScopedServiceProvider {
         this.#references = {};
 
         if(promises.length > 0) {
+            //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
             return Promise.all(promises).then(() => {});
         }
-        //@ts-expect-error - This is a void return intended to suppress the @returns error.
         return /** @type {void} */ (undefined);
     }
 }

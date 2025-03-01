@@ -153,7 +153,8 @@ describe('scopes', () => {
 
         const container = fluxject()
             .register(m => m.singleton({ test2: class Test2 { } }))
-            .register(m => m.scoped({ test: Test }));
+            .register(m => m.transient({ test3: class Test3 { } }))
+            .register(m => m.scoped({ test: Test, test4: class Test4 { } }));
         
         const provider = container.prepare();
         const scope = provider.createScope();
@@ -164,5 +165,62 @@ describe('scopes', () => {
         await result;
         expect(isDisposed).toBe(true);
         expect(scope.test).toBe(undefined);
+    });
+
+    it('should dispose of multiple scoped services when [dispose] on scoped service provider is called', async () => {
+        let isSingleton1Disposed = false;
+        let isSingleton2Disposed = false;
+        let isScoped1Disposed = false;
+        let isScoped2Disposed = false;
+        class Singleton1 {
+            [Symbol.dispose]() {
+                isSingleton1Disposed = true;
+            }
+        }
+        class Singleton2 {
+            [Symbol.dispose]() {
+                isSingleton2Disposed = true;
+            }
+        }
+        class Transient1 {
+            
+        }
+        class Scoped1 {
+            async [Symbol.dispose]() {
+                isScoped1Disposed = true;
+            }
+        }
+        class Scoped2 {
+            async [Symbol.asyncDispose]() {
+                isScoped2Disposed = true;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.singleton({ test1: Singleton1, test2: Singleton2 }))
+            .register(m => m.transient({ test3: Transient1 }))
+            .register(m => m.scoped({ test4: Scoped1, test5: Scoped2 }));
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+        expect(isSingleton1Disposed).toBe(false);
+        expect(isSingleton2Disposed).toBe(false);
+        expect(isScoped1Disposed).toBe(false);
+        expect(isScoped2Disposed).toBe(false);
+        expect(scope.test1).toBeInstanceOf(Singleton1);
+        expect(scope.test2).toBeInstanceOf(Singleton2);
+        expect(scope.test3).toBeInstanceOf(Transient1);
+        expect(scope.test4).toBeInstanceOf(Scoped1);
+        expect(scope.test5).toBeInstanceOf(Scoped2);
+        await scope.dispose();
+        expect(isSingleton1Disposed).toBe(true);
+        expect(isSingleton2Disposed).toBe(true);
+        expect(isScoped1Disposed).toBe(true);
+        expect(isScoped2Disposed).toBe(true);
+        expect(scope.test1).toBe(undefined);
+        expect(scope.test2).toBe(undefined);
+        expect(scope.test3).toBeInstanceOf(Transient1);
+        expect(scope.test4).toBe(undefined);
+        expect(scope.test5).toBe(undefined);
     });
 });
