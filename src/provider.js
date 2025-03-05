@@ -70,34 +70,51 @@ export class FluxjectHostServiceProvider {
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
-        const promises = [];
-        for(const scopedService of this.#scopedServices) {
-            const maybePromise = scopedService.dispose();
-            if(isPromise(maybePromise)) {
-                promises.push(maybePromise);
-            }
-        }
-        for(const key in this.#references) {
-            const service = this.#references[key];
-            if(!service) {
-                continue;
-            }
-            if(Symbol.dispose in service) {
-                /** @type {any} */ (service[Symbol.dispose])();
-            }
-            if(Symbol.asyncDispose in service) {
-                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
+        const disposeScopes = () => {
+            const promises = [];
+            for(const scopedService of this.#scopedServices) {
+                const maybePromise = scopedService.dispose();
                 if(isPromise(maybePromise)) {
                     promises.push(maybePromise);
                 }
             }
-            delete this.#references[key];
+            if(promises.length > 0) {
+                return Promise.all(promises).then(() => {
+                    this.#scopedServices = [];
+                });
+            }
+            this.#scopedServices = [];
         }
-        this.#references = {};
-        this.#scopedServices = [];
-        if(promises.length > 0) {
-            //@ts-expect-error - This is a valid Promise<void> return intended to suppress the @returns error.
-            return Promise.all(promises).then(() => {});
+
+        const disposeRest = () => {
+            const promises = [];
+            for(const key in this.#references) {
+                const service = this.#references[key];
+                if(!service) {
+                    continue;
+                }
+                if(Symbol.dispose in service) {
+                    /** @type {any} */ (service[Symbol.dispose])();
+                }
+                if(Symbol.asyncDispose in service) {
+                    const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
+                    if(isPromise(maybePromise)) {
+                        promises.push(maybePromise);
+                    }
+                }
+                delete this.#references[key];
+            }
+            if(promises.length > 0) {
+                return Promise.all(promises).then(() => {
+                    this.#references = {};
+                });
+            }
+            this.#references = {};
+        }
+
+        const disposeScopesResult = disposeScopes();
+        if(isPromise(disposeScopesResult)) {
+            return /** @type {any} */ (disposeScopesResult.then(disposeRest).then(() => {}));
         }
         return /** @type {void} */ (undefined);
     }
