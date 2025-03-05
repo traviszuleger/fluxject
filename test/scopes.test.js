@@ -186,7 +186,7 @@ describe('scopes', () => {
             
         }
         class Scoped1 {
-            async [Symbol.dispose]() {
+            [Symbol.dispose]() {
                 isScoped1Disposed = true;
             }
         }
@@ -213,8 +213,8 @@ describe('scopes', () => {
         expect(scope.test4).toBeInstanceOf(Scoped1);
         expect(scope.test5).toBeInstanceOf(Scoped2);
         await scope.dispose();
-        expect(isSingleton1Disposed).toBe(true);
-        expect(isSingleton2Disposed).toBe(true);
+        expect(isSingleton1Disposed).toBe(false);
+        expect(isSingleton2Disposed).toBe(false);
         expect(isScoped1Disposed).toBe(true);
         expect(isScoped2Disposed).toBe(true);
         expect(scope.test1).toBe(undefined);
