@@ -26,7 +26,7 @@ export class FluxjectHostServiceProvider {
                 return [name, undefined];
             }
             if(registration.lifetime === "singleton") {
-                return [name, reference(name, registration, injectable(this))];
+                return [name, reference(name, registration, injectable(this, name))];
             }
             throw new Error(`Unknown lifetime ${registration.lifetime}`);
         }));
@@ -43,7 +43,7 @@ export class FluxjectHostServiceProvider {
             Object.defineProperty(this, registrationName, {
                 get: () => {
                     if(registration.lifetime === "transient") {
-                        return reference(registrationName, registration, injectable(this));
+                        return reference(registrationName, registration, injectable(this, registrationName));
                     }
                     return this.#references[registrationName];
                 }
@@ -124,10 +124,10 @@ export class FluxjectScopedServiceProvider {
                 return [name, undefined];
             }
             if(registration.lifetime === "singleton") {
-                return [name, reference(name, registration, injectable(hostProvider))];
+                return [name, reference(name, registration, injectable(hostProvider, name))];
             }
             if(registration.lifetime === "scoped") {
-                return [name, reference(name, registration, injectable(this))];
+                return [name, reference(name, registration, injectable(this, name))];
             }
             throw new Error(`Unknown lifetime ${registration.lifetime}`);
         }));
@@ -143,7 +143,7 @@ export class FluxjectScopedServiceProvider {
             Object.defineProperty(this, registrationName, {
                 get: () => {
                     if(registration.lifetime === "transient") {
-                        return reference(registrationName, registration, injectable(hostProvider));
+                        return reference(registrationName, registration, injectable(hostProvider, registrationName));
                     }
                     return this.#references[registrationName];
                 }
@@ -290,18 +290,20 @@ function reference(name, registration, scope) {
 
 /**
  * Returns a proxy for the given provider that will disallow access to the `createScope` and `dispose` methods.
- * @param {FluxjectHostServiceProvider|FluxjectScopedServiceProvider} provider 
+ * @param {FluxjectHostServiceProvider|FluxjectScopedServiceProvider} provider
+ * @param {string} registrationName
+ * Registration name that called this function. This is to prevent injecting a service into its own constructor.
  */
-function injectable(provider) {
+function injectable(provider, registrationName) {
     return new Proxy(provider, {
         get: (t,p,r) => {
-            if(p === "createScope" || p === "dispose") {
+            if(p === registrationName || p === "createScope" || p === "dispose") {
                 return undefined;
             }
             return provider[p];
         },
         has: (t,p) => {
-            if(p === "createScope" || p === "dispose") {
+            if(p === registrationName || p === "createScope" || p === "dispose") {
                 return false;
             }
             return p in provider;

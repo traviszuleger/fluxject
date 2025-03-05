@@ -93,3 +93,68 @@ export { Container };
  * Container to infer the scoped service provider from
  * @typedef {ReturnType<TContainer['prepare']>} HostServiceProvider
  */
+
+/**
+ * Can be used to infer the abstract type of a class or factory function.  
+ * 
+ * This would ensure that the type of service inferred by container injection is 
+ * of a parent type of the actual service.
+ * ```ts
+ * import { fluxject } from "fluxject";
+ * import type { Abstract } from "fluxject";
+ * 
+ * interface IService {
+ *   test: string;
+ * }
+ * 
+ * class MyService {
+ *   hello = "hello";
+ *   world = "world";
+ * }
+ * 
+ * const provider = fluxject()
+ *   .register(m => m.singleton({ myService: MyService as Abstract<IService> }))
+ *   .prepare();
+ * 
+ * provider.myService.hello; // OK
+ * provider.myService.world; // TypeScript Error: Property 'world' does not exist on type 'IService'
+ * ```
+ * @template TInterface
+ * @typedef {Types.Instantiator<TInterface>} Abstract
+ */
+
+/**
+ * Can be used to infer the abstract type of a class or factory function.  
+ * 
+ * This would ensure that the type of service inferred by container injection is 
+ * of a parent type of the actual service. 
+ * 
+ * __NOTE:__ This is a type-only function and does not have any runtime effect.
+ * ```ts
+ * import { fluxject, abstract } from "fluxject";
+ * 
+ * interface IService {
+ *   test: string;
+ * }
+ * 
+ * class MyService {
+ *   hello = "hello";
+ *   world = "world";
+ * }
+ * 
+ * const provider = fluxject()
+ *   .register(m => m.singleton({ myService: abstract<IService>(MyService)}))
+ *   .prepare();
+ * 
+ * provider.myService.hello; // OK
+ * provider.myService.world; 
+ * // TypeScript Error: Property 'world' does not exist on type 'IService'
+ * ```
+ * @template TInterface
+ * @template [TImplementedType=TInterface]
+ * @param {Types.Instantiator<TImplementedType>} registration 
+ * @returns {Abstract<TInterface>}
+ */
+export function abstract(registration) {
+    return /** @type {any} */ (registration);
+}
