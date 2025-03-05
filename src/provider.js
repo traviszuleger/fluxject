@@ -86,7 +86,7 @@ export class FluxjectHostServiceProvider {
             this.#scopedServices = [];
         }
 
-        const disposeRest = () => {
+        const disposeSingletons = () => {
             const promises = [];
             for(const key in this.#references) {
                 const service = this.#references[key];
@@ -114,9 +114,9 @@ export class FluxjectHostServiceProvider {
 
         const disposeScopesResult = disposeScopes();
         if(isPromise(disposeScopesResult)) {
-            return /** @type {any} */ (disposeScopesResult.then(disposeRest).then(() => {}));
+            return /** @type {any} */ (disposeScopesResult.then(disposeSingletons).then(() => {}));
         }
-        return /** @type {void} */ (undefined);
+        return /** @type {any} */ (disposeSingletons());
     }
 }
 
