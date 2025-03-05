@@ -193,6 +193,10 @@ export class FluxjectScopedServiceProvider {
         }
 
         for(const key in this.#registrations) {
+            const registration = this.#registrations[key];
+            if(registration.lifetime !== "scoped") {
+                continue;
+            }
             const service = this.#references[key];
             if(!service) {
                 continue;
