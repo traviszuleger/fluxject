@@ -29,5 +29,16 @@ describe('main', () => {
         const provider = container.prepare();
         expect(provider.test).toBeInstanceOf(Test);
         expect(isTestUndefined).toBe(true);
-    })
+    });
+
+    it('random cases', async () => {
+        const MyService = async () => ({ x: 0 });
+
+        const container = fluxject()
+            .register(m => m.singleton({ myService: MyService }));
+        
+        const provider = container.prepare();
+        const myService = await provider.myService;
+        expect(myService).toBeInstanceOf(Object);
+    });
 });

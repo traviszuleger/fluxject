@@ -204,6 +204,7 @@ describe('singletons', () => {
 
     it('should asynchronously dispose of singleton services when [dispose] is called', async () => {
         let isDisposed = false;
+       
         class Test {
             async [Symbol.asyncDispose]() {
                 isDisposed = true;

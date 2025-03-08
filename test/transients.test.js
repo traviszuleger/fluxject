@@ -25,14 +25,14 @@ describe('transients', () => {
         expect(isInstantiated).toBe(true);
     });
 
-    it('should return true when checking instance type', () => {
-        class Test {}
+    it('should throw FluxjectError when checking instance type', () => {
+        class Test { x = 1; }
 
         const container = fluxject()
             .register(m => m.transient({ test: Test }));
         
         const provider = container.prepare();
-        expect(provider.test).toBeInstanceOf(Test);
+        expect(() => provider.test instanceof Test).toThrowError();
     });
 
     it('should be able to de-reference a dependency from another dependency', () => {
@@ -43,7 +43,7 @@ describe('transients', () => {
         }
         class Test2 {
             constructor({ test1 }) {
-                canDeReference = test1 instanceof Test1;
+                canDeReference = test1.x === 1;
                 test1X = test1.x;
             }
 
@@ -76,5 +76,44 @@ describe('transients', () => {
         const provider = container.prepare();
         expect(provider.test.createScope).toBeUndefined();
         expect(provider.test.dispose).toBeUndefined();
+    });
+
+    let isDisposed = false;
+    let isTestInvoked = false;
+    class Test {
+        isDisposed = false;
+
+        test() {
+            isTestInvoked = true;
+        }
+
+        [Symbol.dispose]() {
+        }
+        
+        async [Symbol.asyncDispose]() {
+            this.isDisposed = true;
+            isDisposed = true;
+
+        }
+    }
+
+    function factoryTest() {
+        return new Test();
+    }
+
+    it('should dispose of right after calling function', async () => {
+        const container = fluxject()
+            .register(m => m.singleton({ singleton: Test }))
+            .register(m => m.transient({ test: factoryTest }));
+        const provider = container.prepare();
+
+        expect(isDisposed).toBe(false);
+        expect(isTestInvoked).toBe(false);
+        provider.test.test();
+        expect(isDisposed).toBe(true);
+        expect(isTestInvoked).toBe(true);
+        isDisposed = false;
+        expect(provider.test.isDisposed).toBe(false);
+        expect(isDisposed).toBe(true);
     });
 });

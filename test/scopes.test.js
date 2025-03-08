@@ -183,7 +183,7 @@ describe('scopes', () => {
             }
         }
         class Transient1 {
-            
+            x = 1;
         }
         class Scoped1 {
             [Symbol.dispose]() {
@@ -209,7 +209,7 @@ describe('scopes', () => {
         expect(isScoped2Disposed).toBe(false);
         expect(scope.test1).toBeInstanceOf(Singleton1);
         expect(scope.test2).toBeInstanceOf(Singleton2);
-        expect(scope.test3).toBeInstanceOf(Transient1);
+        expect(scope.test3.x).toBe(1);
         expect(scope.test4).toBeInstanceOf(Scoped1);
         expect(scope.test5).toBeInstanceOf(Scoped2);
         await scope.dispose();
@@ -219,7 +219,7 @@ describe('scopes', () => {
         expect(isScoped2Disposed).toBe(true);
         expect(scope.test1).toBe(undefined);
         expect(scope.test2).toBe(undefined);
-        expect(scope.test3).toBeInstanceOf(Transient1);
+        expect(scope.test3).toBe(undefined);
         expect(scope.test4).toBe(undefined);
         expect(scope.test5).toBe(undefined);
     });

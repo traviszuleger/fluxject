@@ -2,6 +2,7 @@
 /** @import * as Types from "./types.js" */
 import { isPromise } from "util/types";
 import { LazyReference } from "./lazy-reference.js";
+import { FluxjectError } from "./errors.js";
 
 /**
  * Internal object used for the Host Service Provider
@@ -19,17 +20,20 @@ export class FluxjectHostServiceProvider {
     constructor(registrations) {
         this.#scopedServices = [];
         /** @type {Record<string, LazyReference<any>|undefined>} */
-        const newReferences = Object.fromEntries(Object.entries(registrations)
-            .filter(([name,registration]) => registration.lifetime !== "scoped")
-            .map(([name,registration]) => {
-            if(registration.lifetime === "transient") {
-                return [name, undefined];
-            }
-            if(registration.lifetime === "singleton") {
-                return [name, reference(name, registration, injectable(this, name))];
-            }
-            throw new Error(`Unknown lifetime ${registration.lifetime}`);
-        }));
+        const newReferences = Object.fromEntries(
+            Object.entries(registrations)
+                .filter(([name,registration]) => registration.lifetime !== "scoped")
+                .map(([name,registration]) => {
+                        if(registration.lifetime === "transient") {
+                            return [name, reference(name, registration, injectable(this, name), true)];
+                        }
+                        if(registration.lifetime === "singleton") {
+                            return [name, reference(name, registration, injectable(this, name), false)];
+                        }
+                        throw new Error(`Unknown lifetime ${registration.lifetime}`);
+                    }
+                )
+            );
         this.#registrations = {
             ...this.#registrations,
             ...registrations
@@ -39,12 +43,8 @@ export class FluxjectHostServiceProvider {
             ...newReferences
         };
         for(const registrationName in registrations) {
-            const registration = registrations[registrationName];
             Object.defineProperty(this, registrationName, {
                 get: () => {
-                    if(registration.lifetime === "transient") {
-                        return reference(registrationName, registration, injectable(this, registrationName));
-                    }
                     return this.#references[registrationName];
                 }
             })
@@ -56,7 +56,7 @@ export class FluxjectHostServiceProvider {
      * @returns {Types.Widen<FluxjectScopedServiceProvider<TRegistrations> & Types.InferInstanceTypes<TRegistrations>>}
      */
     createScope() {
-        const scopedService = /** @type {any} */ (new FluxjectScopedServiceProvider(this, this.#references, this.#registrations));
+        const scopedService = /** @type {any} */ (new FluxjectScopedServiceProvider(this.#references, this.#registrations));
         this.#scopedServices.push(scopedService);
         return scopedService;
     }
@@ -93,14 +93,10 @@ export class FluxjectHostServiceProvider {
                 if(!service) {
                     continue;
                 }
-                if(Symbol.dispose in service) {
-                    /** @type {any} */ (service[Symbol.dispose])();
-                }
-                if(Symbol.asyncDispose in service) {
-                    const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
-                    if(isPromise(maybePromise)) {
-                        promises.push(maybePromise);
-                    }
+                /** @type {any} */ (service[Symbol.dispose])?.();
+                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
+                if(isPromise(maybePromise)) {
+                    promises.push(maybePromise);
                 }
                 delete this.#references[key];
             }
@@ -130,24 +126,22 @@ export class FluxjectScopedServiceProvider {
     #references;
 
     /**
-     * @param {FluxjectHostServiceProvider} hostProvider 
      * @param {Record<string, LazyReference<any>|undefined>} references 
      * @param {TRegistrations} registrations 
      */
-    constructor(hostProvider, references, registrations) {
+    constructor(references, registrations) {
         /** @type {Record<string, LazyReference<any>|undefined>} */
-        const newReferences = Object.fromEntries(Object.entries(registrations).map(([name,registration]) => {
-            if(registration.lifetime === "transient") {
-                return [name, undefined];
-            }
-            if(registration.lifetime === "singleton") {
-                return [name, reference(name, registration, injectable(hostProvider, name))];
-            }
-            if(registration.lifetime === "scoped") {
-                return [name, reference(name, registration, injectable(this, name))];
-            }
-            throw new Error(`Unknown lifetime ${registration.lifetime}`);
-        }));
+        const newReferences = Object.fromEntries(
+            Object.entries(registrations)
+                .filter(([name,registration]) => registration.lifetime === "scoped")
+                .map(([name,registration]) => {
+                        if(registration.lifetime === "scoped") {
+                            return [name, reference(name, registration, injectable(this, name), false)];
+                        }
+                        throw new Error(`Unknown lifetime ${registration.lifetime}`);
+                    }
+                )
+            );
         this.#registrations = {
             ...registrations
         };
@@ -156,12 +150,8 @@ export class FluxjectScopedServiceProvider {
             ...newReferences
         };
         for(const registrationName in registrations) {
-            const registration = registrations[registrationName];
             Object.defineProperty(this, registrationName, {
                 get: () => {
-                    if(registration.lifetime === "transient") {
-                        return reference(registrationName, registration, injectable(hostProvider, registrationName));
-                    }
                     return this.#references[registrationName];
                 }
             })
@@ -201,14 +191,10 @@ export class FluxjectScopedServiceProvider {
             if(!service) {
                 continue;
             }
-            if(Symbol.dispose in service) {
-                /** @type {any} */ (service[Symbol.dispose])();
-            }
-            if(Symbol.asyncDispose in service) {
-                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])();
-                if(isPromise(maybePromise)) {
-                    promises.push(maybePromise);
-                }
+            /** @type {any} */ (service[Symbol.dispose])?.();
+            const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
+            if(isPromise(maybePromise)) {
+                promises.push(maybePromise);
             }
             delete this.#references[key];
         }
@@ -285,16 +271,18 @@ export class CircularDependencyError extends RangeError {
  * The factory method to instantiate the service with.
  * @param {any} scope 
  * The scope to pass into the factory method
+ * @param {boolean} isTransient
  * @returns {any}
  * The instantiated service.
  */
-function reference(name, registration, scope) {
+function reference(name, registration, scope, isTransient) {
     const factory = registration.factory;
     const stackTrace = {};
     const instantiator = () => {
         try {
             if(isConstructor(factory)) {
-                return new factory(scope);
+                const instance = new factory(scope);
+                return instance;
             }
             return factory(scope);
         }
@@ -306,7 +294,7 @@ function reference(name, registration, scope) {
         }
     }
     Error.captureStackTrace(stackTrace, instantiator);
-    return new LazyReference(instantiator);
+    return new LazyReference(instantiator, isTransient);
 }
 
 /**

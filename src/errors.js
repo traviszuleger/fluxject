@@ -1,3 +1,4 @@
+//@ts-check
 /**
  * Thrown when a circular dependency is detected.  
  * 
@@ -51,3 +52,13 @@ export class CircularDependencyError extends RangeError {
         Error.prepareStackTrace?.(this, stackTrace);
     }
 };
+
+export class FluxjectError extends Error {
+    /**
+     * @param {string} message 
+     */
+    constructor(message) {
+        super(message);
+        this.name = "FluxjectError";
+    }
+}
