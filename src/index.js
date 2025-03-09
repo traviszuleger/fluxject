@@ -158,3 +158,19 @@ export { Container };
 export function abstract(registration) {
     return /** @type {any} */ (registration);
 }
+
+/**
+ * 
+ * @template {Container} TContainer
+ * @typedef {keyof Types.InferRegistrationsFromContainer<TContainer>} ServiceKey
+ */
+
+/**
+ * @template T
+ * @typedef {T & Disposable} DisposableService
+ */
+
+/**
+ * @template T
+ * @typedef {T & AsyncDisposable} AsyncDisposableService
+ */

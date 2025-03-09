@@ -116,4 +116,32 @@ describe('transients', () => {
         expect(provider.test.isDisposed).toBe(false);
         expect(isDisposed).toBe(true);
     });
+
+    it('should receive lazy reference when attempting to return reference to service itself from property getter or method', () => {
+        class Test {
+            x = 1;
+
+            getReference() {
+                this.x++;
+                return this;
+            }
+
+            getX() {
+                return this.x;
+            }
+
+        };
+
+        const container = fluxject()
+            .register(m => m.singleton({ test1: Test }))
+            .register(m => m.transient({ test2: Test }));
+        
+        const provider = container.prepare();
+
+        expect(provider.test1.getReference().getX()).toBe(2);
+        expect(provider.test1.getReference().getReference().getReference().getX()).toBe(5);
+
+        expect(provider.test2.getReference().getX()).toBe(1);
+        expect(provider.test2.getReference().getReference().getReference().getX()).toBe(1);
+    });
 });
