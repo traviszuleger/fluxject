@@ -28,7 +28,7 @@ export class Container {
     }
 
     /**
-     * Register a new set of dependencies to the container.  
+     * Register a new set of dependencies to the container 
      * @template {Record<string, Types.Registration<any, any>>} TNewRegistrations
      * The new registrations as inferred from the return type of the callback.
      * @param {(serviceBuilder: RegistrationBuilder) => TNewRegistrations} callback
@@ -44,6 +44,7 @@ export class Container {
             ...registrations
         });
     }
+
 
     /**
      * Prepare the container for consumption.
