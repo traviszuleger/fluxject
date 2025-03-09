@@ -1,23 +1,24 @@
 //@ts-check
 
-/**
- * Check if a value is a constructor without invoking it.
- * @param {any} instantiator 
- * The value to check if it is a constructor.
- * @returns {instantiator is { new (...args: any[]): any }}
- * True if the value is a constructor, false otherwise.
- */
-export function isConstructor(instantiator) {
-    const handler = {
-        construct() {
-            return handler;
-        }
-    };
+/** @readonly */
+const AsyncFunction = (async () => {}).constructor;
 
-    try {
-        return !!(new /** @type {any} */ (new Proxy(instantiator, handler))());
-    } 
-    catch (e) {
+/**
+ * Check if the given function, `fn`, is a constructor.
+ * 
+ * This will not invoke the constructor
+ * @param {any} fn 
+ * Function to check.
+ * @returns {fn is (new (...args: any[]) => any)}
+ * True if the function is a constructor, otherwise false.
+ */
+export function isConstructor(fn) {
+    if(typeof fn !== "function") {
         return false;
     }
+    if(fn instanceof AsyncFunction) {
+        return false;
+    }
+    const prototype = fn.prototype;
+    return prototype && typeof prototype === 'object' && prototype.constructor === fn;
 }
