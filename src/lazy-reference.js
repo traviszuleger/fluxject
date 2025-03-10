@@ -4,6 +4,8 @@ import { isPromise } from "util/types";
 import { isConstructor } from "./util.js";
 import { FluxjectError } from "./errors.js";
 
+export const INSTANCE = Symbol("Fluxject__Instance");
+
 /**
  * Object that allows for services to be lazily instantiated.
  * 
@@ -13,21 +15,25 @@ import { FluxjectError } from "./errors.js";
  * @template TInstanceType
  */
 export class LazyReference {
+    /** 
+     * The actual instance of the service.
+     * 
+     * Stored under a symbol to prevent accidental access.
+     * @type {TInstanceType|undefined} 
+     */
+    [INSTANCE];
+
     /**
      * True if the service has been asynchronously disposed of. 
      * @type {boolean} 
      */
     #asyncDisposed;
+
     /**
      * True if the service has been synchronously disposed of. 
      * @type {boolean} 
      */
     #syncDisposed;
-    /** 
-     * The actual instance of the service.
-     * @type {TInstanceType|undefined} 
-     */
-    #instance;
 
     /**
      * Proxied `this` object, that intercepts properties and ensures instantation before actual property accessors are invoked.
@@ -48,7 +54,7 @@ export class LazyReference {
      */
     constructor(instantiator, isTransient) {
         this.#syncDisposed = false;
-        this.#instance = undefined;
+        this[INSTANCE] = undefined;
         this.#isTransient = isTransient;
         this.#proxy = this.#createProxy(instantiator);
         return this.#proxy;
@@ -65,6 +71,9 @@ export class LazyReference {
              * Trap for getting properties, while instantiating if necessary, on the service.
              */
             get: (target,property,receiver) => {
+                if(property in target) {
+                    return target[property];
+                }
                 // If the service has already been fully disposed, return undefined.
                 if(this.#syncDisposed && this.#asyncDisposed) {
                     return undefined;
@@ -79,7 +88,7 @@ export class LazyReference {
                 if(property === Symbol.dispose) {
                     this.#syncDisposed = true;
                     // Prevent users from disposing an instance that has not been instantiated yet.
-                    if(this.#instance === undefined) {
+                    if(this[INSTANCE] === undefined) {
                         return undefined;
                     }
                 }
@@ -88,33 +97,37 @@ export class LazyReference {
                 if(property === Symbol.asyncDispose) {
                     this.#asyncDisposed = true;
                     // Prevent users from disposing an instance that has not been instantiated yet.
-                    if(this.#instance === undefined) {
+                    if(this[INSTANCE] === undefined) {
                         return undefined;
                     }
                 }
 
                 // If the instance has not been instantiated yet, then instantiate it.
-                if(this.#instance === undefined) {
-                    this.#instance = instantiator();
+                if(this[INSTANCE] === undefined) {
+                    this[INSTANCE] = instantiator();
                 }
 
                 // If the instance is a promise and the property is not `then`, then return undefined.
-                if(isPromise(this.#instance) && property !== "then") {
+                if(isPromise(this[INSTANCE]) 
+                    && property !== "then"
+                    && property !== "catch"
+                    && property !== "finally"
+                ) {
                     return undefined;
                 }
                 
                 // Get the value of the property.
-                const val = this.#instance[property];
+                const val = this[INSTANCE][property];
                 
                 // If the value is a function, bind the function to the instance.
                 if(val instanceof Function) {
                     return (...args) => {
-                        const returnValue = val.bind(this.#instance)(...args);
+                        const returnValue = val.bind(this[INSTANCE])(...args);
 
                         // If the return value is a reference to this service, then return this reference.
                         //   This is to ensure that if the provider is disposed, the user cannot accidentally
                         //   reference data that may no longer exists.
-                        if(returnValue === this.#instance) {
+                        if(returnValue === this[INSTANCE]) {
                             return this.#proxy;
                         }
                         return returnValue;
@@ -124,7 +137,7 @@ export class LazyReference {
                 // If the value is a reference to this service, then return this reference.
                 //   This is to ensure that if the provider is disposed, the user cannot accidentally
                 //   reference data that may no longer exists.
-                if(val === this.#instance) {
+                if(val === this[INSTANCE]) {
                     return this.#proxy;
                 }
 
@@ -135,6 +148,10 @@ export class LazyReference {
              * Trap for setting properties, while instantiating if necessary, on the service.
              */
             set: (target,property,value) => {
+                if(property in target) {
+                    target[property] = value;
+                    return true;
+                }
                 // If the service is transient, then throw an error.
                 if(this.#isTransient) {
                     throw new FluxjectError(`Cannot set properties on a transient reference.`);
@@ -146,12 +163,12 @@ export class LazyReference {
                 }
 
                 // If the instance has not been instantiated yet, then instantiate it.
-                if(this.#instance === undefined) {
-                    this.#instance = instantiator();
+                if(this[INSTANCE] === undefined) {
+                    this[INSTANCE] = instantiator();
                 }
 
                 // Set the property on the instance.
-                this.#instance[property] = value;
+                this[INSTANCE][property] = value;
                 return true;
             },
             /**
@@ -164,16 +181,16 @@ export class LazyReference {
                 }
 
                 // If the instance has not been instantiated yet, then instantiate it.
-                if(this.#instance === undefined) {
+                if(this[INSTANCE] === undefined) {
                     // If the property is a dispose method, then throw an error.
                     if(property === Symbol.dispose || property === Symbol.asyncDispose) {
                         throw new FluxjectError(`Cannot check for dispose methods.`);
                     }
-                    this.#instance = instantiator();
+                    this[INSTANCE] = instantiator();
                 }
 
                 // Check if the property exists on the instance.
-                return property in /** @type {any} */ (this.#instance);
+                return property in /** @type {any} */ (this[INSTANCE]);
             },
             /**
              * Trap for getting the prototype, while instantiating if necessary, of the service.
@@ -185,30 +202,30 @@ export class LazyReference {
                 }
 
                 // If the instance has not been instantiated yet, then instantiate it.
-                if(this.#instance === undefined) {
-                    this.#instance = instantiator();
+                if(this[INSTANCE] === undefined) {
+                    this[INSTANCE] = instantiator();
                 }
                 
                 // Return the prototype of the instance.
-                return Object.getPrototypeOf(this.#instance);
+                return Object.getPrototypeOf(this[INSTANCE]);
             },
             /**
              * Trap for constructing the return value, while instantiating if necessary, of the service.
              */
             construct: (target, args, newTarget) => {
                 // If the instance has not been instantiated yet, then instantiate it.
-                if(this.#instance === undefined) {
-                    this.#instance = instantiator();
+                if(this[INSTANCE] === undefined) {
+                    this[INSTANCE] = instantiator();
                 }
 
                 // If the instance is not a constructable type, then throw an error.
-                if(!isConstructor(this.#instance)) {
+                if(!isConstructor(this[INSTANCE])) {
                     // If `new` is attempted a non constructable instance, throw an error.
                     throw new FluxjectError(`Cannot construct a non-constructor instance.`);
                 }
 
                 // If the instance is a constructable type, construct and return it.
-                return new this.#instance(...args);
+                return new this[INSTANCE](...args);
             }
         });
     }
@@ -225,7 +242,7 @@ export class LazyReference {
         //   This just ensures that the service isn't storing data between usages.
         this.#asyncDisposed = false;
         this.#syncDisposed = false;
-        this.#instance = undefined;
+        this[INSTANCE] = undefined;
         
         // If the property is a dispose method, then return undefined.
         if(property === Symbol.dispose || property === Symbol.asyncDispose) {

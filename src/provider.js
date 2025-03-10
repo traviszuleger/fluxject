@@ -1,7 +1,7 @@
 //@ts-check
 /** @import * as Types from "./types.js" */
 import { isPromise } from "util/types";
-import { LazyReference } from "./lazy-reference.js";
+import { INSTANCE, LazyReference } from "./lazy-reference.js";
 import { isConstructor } from "./util.js";
 
 /**
@@ -15,6 +15,11 @@ export class FluxjectHostServiceProvider {
     #references;
     /** @type {FluxjectScopedServiceProvider[]} */
     #scopedServices;
+
+    
+    get numScopes() {
+        return this.#scopedServices.length;
+    }
 
     /**
      * Construct a new `FluxjectHostServiceProvider` instance.
@@ -210,6 +215,15 @@ export class FluxjectScopedServiceProvider {
             Object.defineProperty(this, registrationName, {
                 get: () => {
                     return this.#references[registrationName];
+                },
+                set: (value) => {
+                    if(!this.#references[registrationName]) {
+                        return;
+                    }
+                    if(registrations[registrationName].lifetime !== "scoped") {
+                        return;
+                    }
+                    this.#references[registrationName][INSTANCE] = value;
                 }
             })
         }

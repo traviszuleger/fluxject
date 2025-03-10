@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { fluxject } from "../src/index.js";
 import { isPromise } from 'util/types';
+import { randomUUID } from 'crypto';
 
 describe('scopes', () => {
     it('should not instantiate service until the service is de-referenced', () => {
@@ -222,5 +223,28 @@ describe('scopes', () => {
         expect(scope.test3).toBe(undefined);
         expect(scope.test4).toBe(undefined);
         expect(scope.test5).toBe(undefined);
+    });
+
+    it('should be able to set a scoped service on the scoped provider', () => {
+        class Test {
+            id = randomUUID();
+            modules = [];
+
+            module(module) {
+                const newTest = new Test();
+                newTest.modules = [...this.modules, module];
+                return newTest;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.scoped({ test: Test }));
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+        const oldId = scope.test.id;
+        scope.test = scope.test.module("Test");
+        expect(scope.test.id).not.toBe(oldId);
+        expect(scope.test.modules).toEqual(["Test"]);
     });
 });
