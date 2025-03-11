@@ -247,4 +247,70 @@ describe('scopes', () => {
         expect(scope.test.id).not.toBe(oldId);
         expect(scope.test.modules).toEqual(["Test"]);
     });
+
+    it('should dispose of all services, despite one service failing during disposal', async () => {
+        let isDisposed1 = false;
+        let isDisposed2 = false;
+        let isDisposed3 = false;
+        let isDisposed4 = false;
+        let isDisposed5 = false;
+        class Test1 {
+            [Symbol.dispose]() {
+                isDisposed1 = true;
+            }
+        }
+        class Test2 {
+            [Symbol.dispose]() {
+                isDisposed2 = true;
+            }
+        }
+        class Test3 {
+            [Symbol.dispose]() {
+                isDisposed3 = true;
+            }
+        }
+        class Test4 {
+            [Symbol.dispose]() {
+                isDisposed4 = true;
+                throw new Error("Test5 failed to dispose.");
+            }
+        }
+        class Test5 {
+            [Symbol.dispose]() {
+                isDisposed5 = true;
+            }
+        }
+
+        const container = fluxject()
+            .register(m => m.singleton({ test1: Test1, test2: Test2 }))
+            .register(m => m.transient({ test3: Test3 }))
+            .register(m => m.scoped({ test4: Test4, test5: Test5 }));
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+
+        expect(isDisposed1).toBe(false);
+        expect(isDisposed2).toBe(false);
+        expect(isDisposed3).toBe(false);
+        expect(isDisposed4).toBe(false);
+        expect(isDisposed5).toBe(false);
+
+        expect(() => scope.dispose()).toThrowError();
+
+        expect(isDisposed1).toBe(false);
+        expect(isDisposed2).toBe(false);
+        expect(isDisposed3).toBe(false);
+        expect(isDisposed4).toBe(true);
+        expect(isDisposed5).toBe(true);
+
+        isDisposed4 = false;
+        isDisposed5 = false;
+        provider.dispose();
+
+        expect(isDisposed1).toBe(true);
+        expect(isDisposed2).toBe(true);
+        expect(isDisposed3).toBe(false);
+        expect(isDisposed4).toBe(false);
+        expect(isDisposed5).toBe(false);
+    });
 });
