@@ -5,6 +5,8 @@ import { isConstructor } from "./util.js";
 import { FluxjectError } from "./errors.js";
 
 export const INSTANCE = Symbol("Fluxject__Instance");
+export const SYNC_DISPOSED = Symbol("Fluxject__SyncDisposed");
+export const DISPOSED = Symbol("Fluxject__Disposed");
 
 /**
  * Object that allows for services to be lazily instantiated.
@@ -23,17 +25,8 @@ export class LazyReference {
      */
     [INSTANCE];
 
-    /**
-     * True if the service has been asynchronously disposed of. 
-     * @type {boolean} 
-     */
-    #asyncDisposed;
-
-    /**
-     * True if the service has been synchronously disposed of. 
-     * @type {boolean} 
-     */
-    #syncDisposed;
+    /** @type {boolean} */
+    [DISPOSED];
 
     /**
      * Proxied `this` object, that intercepts properties and ensures instantation before actual property accessors are invoked.
@@ -53,7 +46,7 @@ export class LazyReference {
      * True if the reference is transient (will be disposed of after property de-referencing)
      */
     constructor(instantiator, isTransient) {
-        this.#syncDisposed = false;
+        this[DISPOSED] = false;
         this[INSTANCE] = undefined;
         this.#isTransient = isTransient;
         this.#proxy = this.#createProxy(instantiator);
@@ -75,31 +68,13 @@ export class LazyReference {
                     return target[property];
                 }
                 // If the service has already been fully disposed, return undefined.
-                if(this.#syncDisposed && this.#asyncDisposed) {
+                if(this[DISPOSED]) {
                     return undefined;
                 }
 
                 // If the service is a Transient service, then they will undergo a different process.
                 if(this.#isTransient) {
                     return this.#handleTransient(instantiator, property);
-                }
-
-                // If the property is a synchronous dispose method, then track that this service is disposed (synchronously).
-                if(property === Symbol.dispose) {
-                    this.#syncDisposed = true;
-                    // Prevent users from disposing an instance that has not been instantiated yet.
-                    if(this[INSTANCE] === undefined) {
-                        return undefined;
-                    }
-                }
-
-                // If the property is an asynchronous dispose method, then track that this service is disposed (asynchronously).
-                if(property === Symbol.asyncDispose) {
-                    this.#asyncDisposed = true;
-                    // Prevent users from disposing an instance that has not been instantiated yet.
-                    if(this[INSTANCE] === undefined) {
-                        return undefined;
-                    }
                 }
 
                 // If the instance has not been instantiated yet, then instantiate it.
@@ -240,8 +215,6 @@ export class LazyReference {
     #handleTransient(instantiator, property) {
         // Transient services are instantiated and disposed of after every usage.
         //   This just ensures that the service isn't storing data between usages.
-        this.#asyncDisposed = false;
-        this.#syncDisposed = false;
         this[INSTANCE] = undefined;
         
         // If the property is a dispose method, then return undefined.
@@ -250,7 +223,6 @@ export class LazyReference {
         }
 
         // If the property is an attempt to await a promise, then return the proxy.
-        //   
         if(property === "then") {
             return this.#proxy;
         }

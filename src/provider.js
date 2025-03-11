@@ -1,7 +1,7 @@
 //@ts-check
 /** @import * as Types from "./types.js" */
 import { isPromise } from "util/types";
-import { INSTANCE, LazyReference } from "./lazy-reference.js";
+import { DISPOSED, INSTANCE, LazyReference } from "./lazy-reference.js";
 import { isConstructor } from "./util.js";
 
 /**
@@ -147,9 +147,13 @@ export class FluxjectHostServiceProvider {
                 /** @type {any} */ (service[Symbol.dispose])?.();
                 const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
                 if(isPromise(maybePromise)) {
-                    promises.push(maybePromise);
+                    promises.push(maybePromise.then(() => {
+                        service[DISPOSED] = true;
+                    }));
                 }
-                delete this.#references[key];
+                else {
+                    service[DISPOSED] = true;
+                }
             }
             if(promises.length > 0) {
                 return Promise.all(promises).then(() => {
@@ -274,21 +278,25 @@ export class FluxjectScopedServiceProvider {
 
             // If the service has an async dispose, then add it to the promises array
             if(isPromise(maybePromise)) {
-                promises.push(maybePromise);
+                promises.push(maybePromise.then(() => {
+                    service[DISPOSED] = true;
+                }));
             }
-
-            // Delete the reference
-            delete this.#references[key];
+            else {
+                service[DISPOSED] = true;
+            }
         }
-
-        // Clear all references (This service provider will be out of order after this)
-        this.#references = {};
 
         // If there are any promises, then return a promise that resolves when all promises are resolved
         if(promises.length > 0) {
             //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
-            return Promise.all(promises).then(() => {});
+            return Promise.all(promises).then(() => {
+                this.#references = {};
+            });
         }
+
+        // Clear all references (This service provider will be out of order after this)
+        this.#references = {};
         return /** @type {void} */ (undefined);
     }
 }
