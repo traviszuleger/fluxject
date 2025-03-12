@@ -99,7 +99,7 @@ export class FluxjectHostServiceProvider {
      * 
      * This will also dispose of all scoped services that have been created by this provider.
      * 
-     * @returns {keyof {[K in keyof Types.InferInstanceTypes<TRegistrations, "singleton"|"transient"> as Types.InferInstanceTypes<TRegistrations, "singleton"|"transient">[K] extends { [Symbol.asyncDispose]: () => Promise<void> } ? K : never]: undefined} extends never ? void : Promise<void>}
+     * @returns {keyof {[K in keyof Types.InferInstanceTypes<TRegistrations, "singleton"|"transient"|"scoped"> as Types.InferInstanceTypes<TRegistrations, "singleton"|"transient"|"scoped">[K] extends { [Symbol.asyncDispose]: () => Promise<void> } ? K : never]: undefined} extends never ? void : Promise<void>}
      * Returns a Promise if any of the services have the `Symbol.asyncDispose` method defined.
      */
     dispose() {
@@ -118,7 +118,6 @@ export class FluxjectHostServiceProvider {
         }
 
         const errors = [];
-        const promises = [];
 
         /**
          * Sets the [DISPOSED] symbol on all services to true and clears the references.
@@ -141,64 +140,100 @@ export class FluxjectHostServiceProvider {
 
         // Dispose of all scoped service providers that were derived from this provider.
 
-        for(const scopedService of this.#scopedServices) {
-            try {
-                const maybePromise = scopedService.dispose();
-                if(isPromise(maybePromise)) {
-                    const disposalPromise = maybePromise
-                        .catch(err => {
-                            if(err instanceof AggregateError) {
-                                errors.push(...err.errors);
-                            }
-                            else {
-                                errors.push(err);
-                            }
-                        });
-                    promises.push(disposalPromise);
+        const disposeScopes = () => {
+            const promises = [];
+            for(const scopedService of this.#scopedServices) {
+                try {
+                    const maybePromise = scopedService.dispose();
+                    if(isPromise(maybePromise)) {
+                        const disposalPromise = maybePromise
+                            .catch(err => {
+                                if(err instanceof AggregateError) {
+                                    errors.push(...err.errors);
+                                }
+                                else {
+                                    errors.push(err);
+                                }
+                            });
+                        promises.push(disposalPromise);
+                    }
+                }
+                catch(err) {
+                    if(err instanceof AggregateError) {
+                        errors.push(...err.errors);
+                    }
+                    else {
+                        errors.push(err);
+                    }
                 }
             }
-            catch(err) {
-                if(err instanceof AggregateError) {
-                    errors.push(...err.errors);
-                }
-                else {
-                    errors.push(err);
-                }
+            if(promises.length > 0) {
+                return Promise.all(promises);
             }
-        }
+        };
 
         // Then dispose of all other services under this provider.
 
-        const registrationEntries = Object.entries(this.#registrations)
-            .sort(([key1, val1], [key2, val2]) => {
-                return val2.priority - val1.priority;
-            });
+        const disposeSingletons = () => {
+            /** @type {Promise<unknown>|undefined} */
+            let promise = undefined;
+            const registrationEntries = Object.entries(this.#registrations)
+                .sort(([key1, val1], [key2, val2]) => {
+                    return val2.priority - val1.priority;
+                });
+    
+            for(const [name, registration] of registrationEntries) {
+                if(registration.lifetime === "scoped") {
+                    continue;
+                }
+                const service = this.#references[name];
+                if(!service) {
+                    continue;
+                }
 
-        for(const [name, registration] of registrationEntries) {
-            if(registration.lifetime === "scoped") {
-                continue;
-            }
-            const service = this.#references[name];
-            if(!service) {
-                continue;
-            }
-            try {
-                /** @type {any} */ (service[Symbol.dispose])?.();
-                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
-                if(isPromise(maybePromise)) {
-                    const disposalPromise = maybePromise
-                        .catch(err => errors.push(err));
-                    promises.push(disposalPromise);
+                // Synchronous disposal first.
+                try {
+                    if(service[Symbol.dispose] !== undefined) {
+                        service[Symbol.dispose]();
+                    }
+                }
+                catch(err) {
+                    errors.push(err);
+                }
+
+                // Asynchronous disposal second.
+                if(service[Symbol.asyncDispose] !== undefined) {
+                    if(promise === undefined) {
+                        const maybePromise = service[Symbol.asyncDispose]();
+                        if(isPromise(maybePromise)) {
+                            promise = maybePromise
+                                .catch(err => errors.push(err));
+                        }
+                    }
+                    else {
+                        promise = promise
+                            .then(service[Symbol.asyncDispose])
+                            .catch(err => errors.push(err));
+                    }
                 }
             }
-            catch(err) {
-                errors.push(err);
-            }
+            return promise;
         }
 
-        if(promises.length > 0) {
-            //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
-            return Promise.all(promises)
+        const scopeDisposal = disposeScopes();
+
+        if(isPromise(scopeDisposal)) {
+            //@ts-expect-error This is a valid return type, despite TypeScript flagging it as not being one.
+            return scopeDisposal
+                .then(disposeSingletons)
+                .finally(finishDisposal);
+        }
+
+        const singletonDisposal = disposeSingletons();
+
+        if(isPromise(singletonDisposal)) {
+            //@ts-expect-error This is a valid return type, despite TypeScript flagging it as not being one.
+            return singletonDisposal
                 .finally(finishDisposal);
         }
 
@@ -285,37 +320,48 @@ export class FluxjectScopedServiceProvider {
             throw err;
         }
 
+        /** @type {Promise<unknown>|undefined} */
+        let promise = undefined;
         const errors = [];
-        const promises = [];
 
         const registrationEntries = Object.entries(this.#registrations).sort(([key1, val1], [key2, val2]) => {
             return val2.priority - val1.priority;
         });
 
-        for(const entry of registrationEntries) {
-            const [name, registration] = entry;
+        for(const [name, registration] of registrationEntries) {
             if(registration.lifetime !== "scoped") {
                 continue;
             }
+
             const service = this.#references[name];
             if(!service) {
                 continue;
             }
 
+            // Synchronous disposal first.
             try {
-                // Dispose of the service (always synchronous then asynchronous)
-                /** @type {any} */ (service[Symbol.dispose])?.();
-                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
-
-                // If the service has an async dispose, then add it to the promises array
-                if(isPromise(maybePromise)) {
-                    const disposalPromise = maybePromise
-                        .catch(err => errors.push(err));
-                    promises.push(disposalPromise);
+                if(service[Symbol.dispose] !== undefined) {
+                    service[Symbol.dispose]();
                 }
             }
             catch(err) {
                 errors.push(err);
+            }
+
+            // Asynchronous disposal second.
+            if(service[Symbol.asyncDispose] !== undefined) {
+                if(promise === undefined) {
+                    const maybePromise = service[Symbol.asyncDispose]();
+                    if(isPromise(maybePromise)) {
+                        promise = maybePromise
+                            .catch(err => errors.push(err));
+                    }
+                }
+                else {
+                    promise = promise
+                        .then(service[Symbol.asyncDispose])
+                        .catch(err => errors.push(err));
+                }
             }
         }
         
@@ -338,16 +384,13 @@ export class FluxjectScopedServiceProvider {
             }
         }
 
-        // If there are any promises, then return a promise that resolves when all promises are resolved
-        if(promises.length > 0) {
-            //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
-            return Promise.all(promises)
+        if(promise !== undefined) {
+            //@ts-expect-error This is a valid return type, despite TypeScript flagging it as not being one.
+            return promise
                 .finally(finishCleanup);
-        }
+        }        
 
-        // Clear all references (This service provider will be out of order after this)
         finishCleanup();
-        return /** @type {void} */ (undefined);
     }
 }
 

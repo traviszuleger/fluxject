@@ -201,5 +201,47 @@ describe('main', () => {
         expect(isScoped1Disposed).toBe(true);
         expect(isScoped2Disposed).toBe(true);
         expect(isScoped3Disposed).toBe(true);
-    })
+    });
+
+    it('scopes should dispose before singletons', async () => {
+        let isScopedDisposed = false;
+        let isSingletonDisposed = false;
+
+        class Scoped {
+            value = 0;
+            disposed = false;
+            async [Symbol.asyncDispose]() {
+                console.log(`Disposing [Scoped]`);
+                await new Promise(r => setTimeout(r, 1000));
+                isScopedDisposed = this.disposed = true;
+                console.log(`Disposed [Scoped]`);
+            }
+        }
+
+        class Singleton {
+            value = 1;
+
+            [Symbol.dispose]() {
+                console.log(`Disposing [Singleton]`);
+                isSingletonDisposed = isScopedDisposed;
+                console.log(`Disposed [Singleton]`);
+            }
+        }
+
+        const container = fluxject()
+            .addSingleton("singleton", Singleton)
+            .addScope("scoped", Scoped)
+        
+        const provider = container.prepare();
+        const scope = provider.createScope();
+
+        expect(scope.scoped.value).toBe(0);
+        expect(provider.singleton.value).toBe(1);
+        expect(scope.singleton.value).toBe(1);
+
+        await provider.dispose();
+
+        expect(isScopedDisposed).toBe(true);
+        expect(isSingletonDisposed).toBe(true);
+    });
 });
