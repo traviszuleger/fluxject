@@ -127,7 +127,6 @@ export class FluxjectHostServiceProvider {
                 this.#references[key][DISPOSED] = true;
             }
             this.#references = {};
-            this.#scopedServices = [];
         }
 
         /**
@@ -362,7 +361,10 @@ export class FluxjectScopedServiceProvider {
          * Sets the [DISPOSED] symbol on all services to true and clears the references.
          */
         const finishCleanup = () => {
-            for(const key in this.#references) {
+            for(const key in this.#registrations) {
+                if(this.#registrations[key].lifetime !== "scoped") {   
+                    continue;
+                }
                 if(!this.#references[key]) {
                     continue;
                 }
