@@ -2,6 +2,14 @@
 /** @import * as Types from "./types.js" */
 
 export class RegistrationBuilder {
+    #priority;
+
+    /**
+     * @param {number} priority 
+     */
+    constructor(priority) {
+        this.#priority = priority;
+    }
 
     /**
      * Register a new set of dependencies with the lifetime of "scoped".
@@ -18,7 +26,8 @@ export class RegistrationBuilder {
         for(const key in newRegistrations) {
             registrations[key] = {
                 lifetime: "scoped",
-                factory: newRegistrations[key]
+                factory: newRegistrations[key],
+                priority: this.#priority
             };
         }
         return registrations;
@@ -39,7 +48,8 @@ export class RegistrationBuilder {
         for(const key in newRegistrations) {
             registrations[key] = {
                 lifetime: "singleton",
-                factory: newRegistrations[key]
+                factory: newRegistrations[key],
+                priority: this.#priority
             };
         }
         return registrations;
@@ -60,7 +70,8 @@ export class RegistrationBuilder {
         for(const key in newRegistrations) {
             registrations[key] = {
                 lifetime: "transient",
-                factory: newRegistrations[key]
+                factory: newRegistrations[key],
+                priority: 0
             };
         }
         return registrations;

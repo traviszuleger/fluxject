@@ -11,6 +11,7 @@ import { FluxjectError } from "./errors.js";
  * Registrations configured on the container.
  */
 export class FluxjectHostServiceProvider {
+    /** @type {TRegistrations} */
     #registrations;
     /** @type {Record<string, LazyReference<any>|undefined>} */
     #references;
@@ -116,6 +117,9 @@ export class FluxjectHostServiceProvider {
             throw err;
         }
 
+        const errors = [];
+        const promises = [];
+
         /**
          * Sets the [DISPOSED] symbol on all services to true and clears the references.
          */
@@ -126,121 +130,79 @@ export class FluxjectHostServiceProvider {
                 }
                 this.#references[key][DISPOSED] = true;
             }
+            //@ts-expect-error - Registrations needs to be wiped here, as the provider will be out of commission.
+            this.#registrations = {};
             this.#references = {};
+
+            if(errors.length > 0) {
+                throw new AggregateError(errors, "One or more services failed to dispose.");
+            }
         }
 
-        /**
-         * Disposes of all Scoped services.
-         */
-        const disposeScopes = () => {
-            const errors = [];
-            const promises = [];
-            for(const scopedService of this.#scopedServices) {
-                try {
-                    const maybePromise = scopedService.dispose();
-                    // If it's a promise, then we need to add it to the promises array.
-                    if(isPromise(maybePromise)) {
-                        const disposalPromise = maybePromise
-                            // Catch any errors and push it into our errors array.
-                            .catch(err => errors.push(err));
-                        promises.push(disposalPromise);
-                    }
+        // Dispose of all scoped service providers that were derived from this provider.
+
+        for(const scopedService of this.#scopedServices) {
+            try {
+                const maybePromise = scopedService.dispose();
+                if(isPromise(maybePromise)) {
+                    const disposalPromise = maybePromise
+                        .catch(err => {
+                            if(err instanceof AggregateError) {
+                                errors.push(...err.errors);
+                            }
+                            else {
+                                errors.push(err);
+                            }
+                        });
+                    promises.push(disposalPromise);
                 }
-                catch(err) {
-                    // If an error occurs, then push it into our errors array.
+            }
+            catch(err) {
+                if(err instanceof AggregateError) {
+                    errors.push(...err.errors);
+                }
+                else {
                     errors.push(err);
                 }
             }
-
-            // If one or more services that were disposed synchronously failed, then we throw an error.
-            if(errors.length > 0) {
-                throw new FluxjectError(`Error disposing of one or more scoped services: ${errors.map(err => err.message).join(", ")}`);
-            }
-
-            // If there are any promises, then return a promise that resolves when all promises are resolved
-            if(promises.length > 0) {
-                return Promise.all(promises)
-                    .then(() => {
-                        // If one or more services that were disposed asynchronously failed, then we throw an error.
-                        if(errors.length > 0) {
-                            throw new FluxjectError(`Error disposing of one or more scoped services: ${errors.map(err => err.message).join(", ")}`);
-                        }
-                    })
-                    // Finally, we will clear out scoped services reference.
-                    .finally(() => {
-                        this.#scopedServices = [];
-                    });
-            }
-
-            // Finally (only if there were no asynchronous services) we will clear out scoped services reference.
-            this.#scopedServices = [];
-        };
-
-        /**
-         * Disposes of all Singleton services.
-         */
-        const disposeSingletons = () => {
-            const failedServices = [];
-            const promises = [];
-            for(const key in this.#references) {
-                const service = this.#references[key];
-                if(!service) {
-                    continue;
-                }
-                try {
-                    /** @type {any} */ (service[Symbol.dispose])?.();
-                    const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
-                    // If it's a promise, then we need to add it to the promises array.
-                    if(isPromise(maybePromise)) {
-                        const disposalPromise = maybePromise
-                            // Catch any errors and push it into our errors array.
-                            .catch(err => failedServices.push(key));
-                        promises.push(disposalPromise);
-                    }
-                }
-                catch(err) {
-                    // If an error occurs, then push it into our errors array.
-                    failedServices.push(err);
-                }
-            }
-
-            // If one or more services that were disposed synchronously failed, then we throw an error.
-            if(failedServices.length > 0) {
-                throw new FluxjectError(`Error disposing of one or more singleton services: [${failedServices.join(", ")}]`);
-            }
-
-            // If there are any promises, then return a promise that resolves when all promises are resolved
-            if(promises.length > 0) {
-                return Promise.all(promises)
-                    .then(() => {
-                        // If one or more services that were disposed asynchronously failed, then we throw an error.
-                        if(failedServices.length > 0) {
-                            throw new FluxjectError(`Error disposing of one or more singleton services: [${failedServices.join(", ")}]`);
-                        }
-                    })
-                    // Finally, we will clear call finishDisposal, which sets all services to disposed and clears our references.
-                    .finally(finishDisposal);
-            }
-
-            // Finally (only if there were no asynchronous services) we will call finishDisposal, 
-            // which sets all services to disposed and clears our references.
-            finishDisposal();
         }
 
-        // Dispose all Scoped services first.
-        const disposeScopesResult = disposeScopes();
+        // Then dispose of all other services under this provider.
 
-        // If there are any promises, then return a promise that resolves when all promises are resolved
-        if(isPromise(disposeScopesResult)) {
-            // After disposing of all scoped services, dispose of all singleton services (and return undefined)
-            return /** @type {any} */ (
-                disposeScopesResult.then(disposeSingletons)
-            );
+        const registrationEntries = Object.entries(this.#registrations)
+            .sort(([key1, val1], [key2, val2]) => {
+                return val2.priority - val1.priority;
+            });
+
+        for(const [name, registration] of registrationEntries) {
+            if(registration.lifetime === "scoped") {
+                continue;
+            }
+            const service = this.#references[name];
+            if(!service) {
+                continue;
+            }
+            try {
+                /** @type {any} */ (service[Symbol.dispose])?.();
+                const maybePromise = /** @type {any} */ (service[Symbol.asyncDispose])?.();
+                if(isPromise(maybePromise)) {
+                    const disposalPromise = maybePromise
+                        .catch(err => errors.push(err));
+                    promises.push(disposalPromise);
+                }
+            }
+            catch(err) {
+                errors.push(err);
+            }
         }
 
-        // Dispose of all singleton services.
-        return /** @type {any} */ (disposeSingletons());
+        if(promises.length > 0) {
+            //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
+            return Promise.all(promises)
+                .finally(finishDisposal);
+        }
 
+        finishDisposal();
     }
 }
 
@@ -292,7 +254,7 @@ export class FluxjectScopedServiceProvider {
                         return;
                     }
                     if(registrations[registrationName].lifetime !== "scoped") {
-                        return;
+                        throw new FluxjectError(`Cannot set a non-scoped service: ${registrationName}`);
                     }
                     this.#references[registrationName][INSTANCE] = value;
                 }
@@ -323,23 +285,23 @@ export class FluxjectScopedServiceProvider {
             throw err;
         }
 
-        const failedServices = [];
+        const errors = [];
         const promises = [];
 
-        // Dispose of all scoped services
-        for(const key in this.#registrations) {
-            const registration = this.#registrations[key];
+        const registrationEntries = Object.entries(this.#registrations).sort(([key1, val1], [key2, val2]) => {
+            return val2.priority - val1.priority;
+        });
 
-            // Only dispose of scoped services
+        for(const entry of registrationEntries) {
+            const [name, registration] = entry;
             if(registration.lifetime !== "scoped") {
                 continue;
             }
-
-            const service = this.#references[key];
+            const service = this.#references[name];
             if(!service) {
                 continue;
             }
-            
+
             try {
                 // Dispose of the service (always synchronous then asynchronous)
                 /** @type {any} */ (service[Symbol.dispose])?.();
@@ -348,15 +310,15 @@ export class FluxjectScopedServiceProvider {
                 // If the service has an async dispose, then add it to the promises array
                 if(isPromise(maybePromise)) {
                     const disposalPromise = maybePromise
-                        .catch(err => failedServices.push(key));
+                        .catch(err => errors.push(err));
                     promises.push(disposalPromise);
                 }
             }
             catch(err) {
-                failedServices.push(key);
+                errors.push(err);
             }
         }
-
+        
         /**
          * Sets the [DISPOSED] symbol on all services to true and clears the references.
          */
@@ -371,23 +333,15 @@ export class FluxjectScopedServiceProvider {
                 this.#references[key][DISPOSED] = true;
             }
             this.#references = {};
-        }
-
-        // If one or more services that were disposed synchronously failed, then we throw an error.
-        if(failedServices.length > 0) {
-            throw new FluxjectError(`Error disposing of one or more scoped services: ${failedServices.map(service => service).join(", ")}`);
+            if(errors.length > 0) {
+                throw new AggregateError(errors, "One or more scoped services failed to dispose.");
+            }
         }
 
         // If there are any promises, then return a promise that resolves when all promises are resolved
         if(promises.length > 0) {
             //@ts-expect-error - This is a Promise<void> return intended to suppress the `return` error.
             return Promise.all(promises)
-                .then(() => {
-                    // If one or more services that were disposed asynchronously failed, then we throw an error.
-                    if(failedServices.length > 0) {
-                        throw new FluxjectError(`Error disposing of one or more scoped services: ${failedServices.map(service => service).join(", ")}`);
-                    }
-                })
                 .finally(finishCleanup);
         }
 

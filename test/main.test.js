@@ -75,7 +75,6 @@ describe('main', () => {
         
         const provider = container.prepare();
         const myService = await provider.myService;
-        console.log(myService);
         new myService(1, "2", true);
         expect(myServiceX).toBe(1);
         expect(myServiceY).toBe("2");
@@ -132,53 +131,75 @@ describe('main', () => {
         expect(scope3.test1.x).toBe(1);
     });
 
-    it('should not be able to leak reference of transient service outside provider', async () => {
-        let numInstances = 0;
-        class TransientService {
-            #x = 1;
-        
-            get x() { return this.#x;}
-        
-            constructor() {
-                numInstances++;
-                console.log(`Instantiating TransientService (#${numInstances})`);
+    it('should dispose of scoped services in the correct order', () => {
+        let isScoped1Disposed = false;
+        let isScoped2Disposed = false;
+        let isScoped3Disposed = false;
+        class Scoped1 {
+            constructor({ scope2, scope3 }) {
+                this.scoped2 = scope2;
+                this.scoped3 = scope3;
             }
-        
-            get ref() {
-                this.#x = 2;
-                return this;
+
+            isDisposed = false;
+            [Symbol.dispose]() {
+                isScoped1Disposed = this.isDisposed = (this.scoped2.isDisposed && this.scoped3.isDisposed);
             }
-        
-            getRef() {
-                this.#x = 3;
-                return this;
+        }
+        class Scoped2 {
+            constructor({ scope1, scope3 }) {
+                this.scoped1 = scope1;
+                this.scoped3 = scope3;
             }
-        
-            async getRefAsync() {
-                this.#x = 4;
-                return this;
+
+            isDisposed = false;
+            [Symbol.dispose]() {
+                isScoped2Disposed = this.isDisposed = true;
             }
-        
-            getRefAsync2() {
-                this.#x = 5;
-                return new Promise(res => res(new Promise(res => res(new Promise(res => res(this))))));
+        }
+        class Scoped3 {
+            constructor({ scope1, scope2 }) {
+                this.scoped1 = scope1; 
+                this.scoped2 = scope2;
             }
-        };
-        
+
+            isDisposed = false;
+            [Symbol.dispose]() {
+                isScoped3Disposed = this.isDisposed = true;
+            }
+        }
+
         const container = fluxject()
-            .register(m => m.transient({ transientService: TransientService }));
+            .addScopes({
+                scope1: Scoped1
+            })
+            .addScopes({
+                scope2: Scoped2,
+                scope3: Scoped3
+            });
 
         const provider = container.prepare();
-        
-        console.log(`x:`, provider.transientService.x);
-        console.log(`Finished x.`);
-        console.log(`ref.x:`, provider.transientService.ref.x);
-        console.log(`Finished ref.x`);
-        console.log(`getRef().x`, provider.transientService.getRef().x);
-        console.log(`Finished getRef().x`);
-        console.log(`(await getRefAsync()).x`, (await provider.transientService.getRefAsync()).x);
-        console.log(`Finished (await getRefAsync()).x`);
-        console.log(`(await getRefAsync2()).x`, (await provider.transientService.getRefAsync2()).x);
-        console.log(`Finished (await getRefAsync2()).x`);
-    });
+
+        const scope = provider.createScope();
+
+        expect(isScoped1Disposed).toBe(false);
+        expect(isScoped2Disposed).toBe(false);
+        expect(isScoped3Disposed).toBe(false);
+        expect(scope.scope1.isDisposed).toBe(false);
+        expect(scope.scope2.isDisposed).toBe(false);
+        expect(scope.scope3.isDisposed).toBe(false);
+
+        try {
+            scope.dispose();
+        }
+        catch(err) {
+            if(err instanceof AggregateError) {
+                console.log(err.errors);
+            }
+        }
+
+        expect(isScoped1Disposed).toBe(true);
+        expect(isScoped2Disposed).toBe(true);
+        expect(isScoped3Disposed).toBe(true);
+    })
 });

@@ -12,6 +12,7 @@
  * @typedef Registration
  * @prop {TLifetime} lifetime
  * @prop {Instantiator<TInstanceType>} factory
+ * @prop {number} priority
  */
 
 /**
