@@ -289,6 +289,12 @@ describe('scopes', () => {
         const provider = container.prepare();
         const scope = provider.createScope();
 
+        // lazily instantiate them first.
+        scope.test1 instanceof Test1;
+        scope.test2 instanceof Test2;
+        scope.test4 instanceof Test4;
+        scope.test5 instanceof Test5;
+
         expect(isDisposed1).toBe(false);
         expect(isDisposed2).toBe(false);
         expect(isDisposed3).toBe(false);

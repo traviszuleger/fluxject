@@ -79,6 +79,10 @@ export class LazyReference {
 
                 // If the instance has not been instantiated yet, then instantiate it.
                 if(this[INSTANCE] === undefined) {
+                    if(property === Symbol.dispose || property === Symbol.asyncDispose) {
+                        // Unless the property is a dispose method, then don't do anything.
+                        return undefined;
+                    }
                     this[INSTANCE] = instantiator();
                 }
 
