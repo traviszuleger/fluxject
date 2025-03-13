@@ -4,7 +4,6 @@ import { describe, it, expect } from 'vitest'
 import { fluxject } from "../src/index.js";
 import { isPromise } from 'util/types';
 import { randomUUID } from 'crypto';
-import { extract } from '../src/container.js';
 
 describe('scopes', () => {
     it('should not instantiate service until the service is de-referenced', () => {
@@ -321,18 +320,4 @@ describe('scopes', () => {
         expect(isDisposed5).toBe(false);
     });
 
-    it('should be able to extract a reference from a lazy reference', () => {
-        class A { };
-
-        const container = fluxject()
-            .addSingleton("a", A);
-        
-        const provider = container.prepare();
-
-        const a = extract(provider.a);
-        
-        provider.dispose();
-
-        expect(a).toBeInstanceOf(A);
-    })
 });

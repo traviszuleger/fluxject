@@ -1,7 +1,7 @@
 //@ts-check
 
 import { describe, it, expect } from 'vitest'
-import { fluxject } from "../src/index.js";
+import { extract, fluxject } from "../src/index.js";
 
 describe('main', () => {
     it('should not be able to de-reference scoped service from host service provider', () => {
@@ -243,5 +243,21 @@ describe('main', () => {
 
         expect(isScopedDisposed).toBe(true);
         expect(isSingletonDisposed).toBe(true);
+    });
+
+    
+    it('should be able to extract a reference from a lazy reference', () => {
+        class A { };
+
+        const container = fluxject()
+            .addSingleton("a", A);
+        
+        const provider = container.prepare();
+
+        const a = extract(provider.a);
+
+        provider.dispose();
+
+        expect(a).toBeInstanceOf(A);
     });
 });
