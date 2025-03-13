@@ -4,6 +4,7 @@
 import { addPolyfills, needsPolyfills } from "./polyfills.js";
 import { FluxjectHostServiceProvider, FluxjectScopedServiceProvider } from "./provider.js";
 import { Container } from "./container.js";
+import { extract } from "./lazy-reference.js";
 
 if(needsPolyfills()) {
     addPolyfills();
@@ -59,7 +60,7 @@ export function fluxject() {
     return Container.create();
 }
 
-export { Container };
+export { Container, extract };
 
 /**
  * Infer the correct service provider that would be passed into the instantiator for the given `TServiceName` from `TContainer`.
