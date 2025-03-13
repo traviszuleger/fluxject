@@ -65,6 +65,9 @@ export class LazyReference {
              */
             get: (target,property,receiver) => {
                 if(property in target) {
+                    if(property === INSTANCE && this[INSTANCE] === undefined) {
+                        this[INSTANCE] = instantiator();
+                    }
                     return target[property];
                 }
                 // If the service has already been fully disposed, return undefined.

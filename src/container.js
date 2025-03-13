@@ -1,6 +1,7 @@
 //@ts-check
 /** @import * as Types from "./types.js" */
 import { RegistrationBuilder } from "./builder.js";
+import { INSTANCE } from "./lazy-reference.js";
 import { FluxjectHostServiceProvider } from "./provider.js";
 
 /**
@@ -258,3 +259,17 @@ export class Container {
  * @typedef RegistrationOptions
  * @property {number} priority
  */
+
+/**
+ * Extract the instance from a lazy reference.  
+ * 
+ * __This is not recommended to use unless you know what you are doing.__
+ * @template T
+ * The type of the instance to extract.
+ * @param {T} reference 
+ * The lazy reference to extract the value from
+ * @returns {T}
+ */
+export function extract(reference) {
+    return reference[INSTANCE];
+}
