@@ -49,24 +49,54 @@ $ npm install fluxject
 
 ```ts
 import { fluxject } from "fluxject";
-import type { InferServiceProvider } from "fluxject";
+import type { AsyncDisposableService, DisposableService, InferServiceProvider } from "fluxject";
+
+interface IService {};
+
+interface ISingletons {
+    singleton2: IService;
+    singleton3: IService;
+}
+
+interface ITransients {
+    transient2: IService;
+    transient3: IService;
+}
+
+interface IScopes {
+    scope2: IService;
+    scope3: IService;
+}
 
 const container = fluxject()
-    .register(m => m.singleton({
-        // Singleton Services declared here
-        // singleton: SingletonService
-    }))
-    .register(m => m.transient({
-        // Transient Services declared here
-        // transient: TransientService
-    }))
-    .register(m => m.scoped({
-        // Scoped Services declared here
-        // transient: ScopedService
-    }));
+    .addSingleton<IService>("singleton1", class Singleton1 implements IService { })
+    .addSingletons<ISingletons>({
+        singleton2: class Singleton2 implements IService { },
+        singleton3: class Singleton3 implements IService { }
+    })
+    .addScope<IService>("scope1", class Scope1 implements IService { })
+    .addScopes<IScopes>({
+        scope2: class Scope2 implements IService { },
+        scope3: class Scope3 implements IService { }
+    })
+    .addTransient<IService>("transient1", class Transient1 implements IService { })
+    .addTransients<ITransients>({
+        transient2: class Transient2 implements IService { },
+        transient3: class Transient3 implements IService { }
+    })
+    .addSingleton<AsyncDisposableService<DisposableService<IService>>>("myService", MyService)
 
 const provider = container.prepare();
 // your startup code here:
+
+// when you need to create a new scope
+const scope = provider.createScope();
+
+// don't forget to dispose of your scopes!
+scope.dispose();
+
+// when your app finishes
+await provider.dispose(); // only awaiting because `myService` has the `[Symbol.asyncDispose]` method declared as an async function.
 
 class MyService {
     
@@ -74,6 +104,7 @@ class MyService {
         
     }
 
+    // typically you'd only use one of these dispose functions.
     [Symbol.dispose]() {
         // dispose synchronously here.
     }
@@ -88,35 +119,62 @@ class MyService {
 ## JSDOC
 
 ```js
-/** @import { InferServiceProvider } from "fluxject"; */
+/** @import { Abstract, AsyncDisposableService, DisposableService, InferServiceProvider } from "fluxject"; */
 import { fluxject } from "fluxject";
 
+/**
+ * @typedef {object} IService
+ * 
+ * @typedef ISingletons
+ * @prop {IService} singleton2
+ * @prop {IService} singleton3
+ * 
+ * @typedef ITransients
+ * @prop {IService} transient2
+ * @prop {IService} transient3
+ * 
+ * @typedef IScopes
+ * @prop {IService} scope2
+ * @prop {IService} scope3
+ */
+
 const container = fluxject()
-    .register(m => m.singleton({
-        // Singleton Services declared here
-        // singleton: SingletonService
-    }))
-    .register(m => m.transient({
-        // Transient Services declared here
-        // transient: TransientService
-    }))
-    .register(m => m.scoped({
-        // Scoped Services declared here
-        // transient: ScopedService
-    }));
+    .addSingleton("singleton1", /** @type {Abstract<IService>} */ (class Singleton1 { }))
+    .addSingletons({
+        singleton2: /** @type {Abstract<IService>} */ (class Singleton2 { }),
+        singleton3: /** @type {Abstract<IService>} */ (class Singleton3 { })
+    })
+    .addScope("scope1", /** @type {Abstract<IService>} */ (class Scope1 { }))
+    .addScopes({
+        scope2: /** @type {Abstract<IService>} */ (class Scope2 { }),
+        scope3: /** @type {Abstract<IService>} */ (class Scope3 { })
+    })
+    .addTransient("transient1", /** @type {Abstract<IService>} */ (class Transient1 { }))
+    .addTransients({
+        transient2: /** @type {Abstract<IService>} */ (class Transient2 { }),
+        transient3: /** @type {Abstract<IService>} */ (class Transient3 { })
+    })
+    .addSingleton("myService", /** @type {Abstract<AsyncDisposableService<DisposableService<IService>>>} */ (MyService))
 
 const provider = container.prepare();
 // your startup code here:
 
+// when you need to create a new scope
+const scope = provider.createScope();
+
+// don't forget to dispose of your scopes!
+scope.dispose();
+
+// when your app finishes
+await provider.dispose(); // only awaiting because `myService` has the `[Symbol.asyncDispose]` method declared as an async function.
+
 class MyService {
     
-    /**
-     * @param {InferServiceProvider<typeof container, "myService">} services
-     */
-    constructor({}) {
+    constructor({}: InferServiceProvider<typeof container, "myService">) {
         
     }
 
+    // typically you'd only use one of these dispose functions.
     [Symbol.dispose]() {
         // dispose synchronously here.
     }
@@ -253,6 +311,9 @@ const container = fluxject()
 
 __Services will only be disposed of if they were instantiated__
 
+> __CAUTION__  
+> If scoped service providers are not disposed of, then your application has a risk of getting a memory leak, as the host provider that created those scopes will still hold a reference to those scopes. Those references will only ever be removed when the scoped provider is disposed or the host provider is disposed.
+
 ## Example
 
 ```ts
@@ -341,9 +402,20 @@ Disposed A # singletons always dispose last.
 
 # Utility
 
-Fluxject offers the following utility functions under the following `fluxject/util` sub-directive.
+Fluxject offers the following utility functions:
   - `extract<T>(T)`: Extracts the actual instance (and instantiates if necessary) from the given service, removing the underlying `LazyReference` proxy. __Use this function with care, as it is an experimental feature and may lead to unpredictable results__
   - `isExtracted(object)`: Returns true if the service has been extracted from a `LazyReference`. (In actuality, it only checks if `object` is an `instanceof` `LazyReference`.)
+
+# Types
+
+Fluxject offers the following utility types:
+  - `Abstract<T>`: Wraps `T` within an instantiator interface, so abstract services can be supported.
+  - `AsyncDisposableService<T>`: Asserts that `T` has a `Symbol.asyncDispose` method.
+  - `DisposableService<T>`: Asserts that `T` has a `Symbol.dispose` method.
+  - `ServiceKey<TContainer extends Container>`: Returns the type of all registered dependency names as a union.
+  - `HostServiceProvider<TContainer extends Container>`: Returns the type that would be returned from `Container#prepare()`.
+  - `ScopedServiceProvider<TContainer extends Container>`: Returns the type that would be returned from `HostServiceProvider#createScope()`.
+  - `InferServiceProvider<TContainer extends Container, TServiceName extends ServiceKey<TContainer>>`: Returns an interface of the expected services that would be injected into the service by its name, `TServiceName`.
 
 # Troubleshooting 
 

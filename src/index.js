@@ -96,16 +96,51 @@ export { Container, extract, isExtracted };
  */
 
 /**
+ * Can be used to infer the abstract type of a class or factory function.  
+ * 
+ * This would ensure that the type of service inferred by container injection is 
+ * of a parent type of the actual service.
+ * ```ts
+ * import { fluxject } from "fluxject";
+ * import type { Abstract } from "fluxject";
+ * 
+ * interface IService {
+ *   test: string;
+ * }
+ * 
+ * class MyService {
+ *   hello = "hello";
+ *   world = "world";
+ * }
+ * 
+ * const provider = fluxject()
+ *   .register(m => m.singleton({ myService: MyService as Abstract<IService> }))
+ *   .prepare();
+ * 
+ * provider.myService.hello; // OK
+ * provider.myService.world; // TypeScript Error: Property 'world' does not exist on type 'IService'
+ * ```
+ * @template TInterface
+ * @typedef {Types.Instantiator<TInterface>} Abstract
+ */
+
+/**
+ * Get the names of all services registered in a container as a single union type.
  * @template {Container} TContainer
+ * Container to infer the service names from.
  * @typedef {keyof Types.InferRegistrationsFromContainer<TContainer>} ServiceKey
  */
 
 /**
- * @template T
- * @typedef {T & Disposable} DisposableService
+ * Asserts that the service implements the `Symbol.dispose` method.
+ * @template TAbstractService
+ * Abstract service that implements the `Symbol.dispose` method.
+ * @typedef {TAbstractService & Disposable} DisposableService
  */
 
 /**
- * @template T
- * @typedef {T & AsyncDisposable} AsyncDisposableService
+ * Asserts that the service implements the `Symbol.asyncDispose` method.
+ * @template TAbstractService
+ * Abstract service that implements the `Symbol.asyncDispose` method.
+ * @typedef {TAbstractService & { [Symbol.asyncDispose]: () => Promise<void> }} AsyncDisposableService
  */
