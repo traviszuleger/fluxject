@@ -287,13 +287,39 @@ export class LazyReference {
 /**
  * Extract the instance from a lazy reference.  
  * 
- * __This is not recommended to use unless you know what you are doing.__
+ * __EXPERIMENTAL: This function should be used at your own risk, and should expect possible changes.__
+ * @example
+ * const container = fluxject()
+ *   .addSingleton("service", MyService);
+ * 
+ * const provider = container.prepare();
+ * const extracted = extract(provider.service);
+ * 
+ * provider.dispose();
+ * 
+ * // extracted is still the instance itself, so you actually have full control over the instance.
+ * //  BE CAREFUL, this can lead to unexpectd behavior if the service was disposed of at any point in time.
+ * provider.service === undefined; // true
+ * extracted === undefined; // false 
  * @template T
  * The type of the instance to extract.
  * @param {T} reference 
  * The lazy reference to extract the value from
  * @returns {T}
+ * The instance that exists on the lazy reference. 
+ * If the lazy reference has not instantiated the service yet, then the service will be instantiated.
  */
 export function extract(reference) {
     return reference[INSTANCE];
+}
+
+/**
+ * Check if a reference is an extracted instance. (In other words, if the reference is anything but a lazy reference)
+ * @param {any} reference 
+ * The reference to check
+ * @returns {boolean} 
+ * True if the reference is an extracted instance, false otherwise.
+ */
+export function isExtracted(reference) {
+    return reference instanceof LazyReference;
 }
