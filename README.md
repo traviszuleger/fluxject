@@ -1,19 +1,20 @@
 # Fluxject
 
-Inversion of Control library that manages the access and lifetime of registered dependencies.
+Fluxject is an Inversion of Control (IoC) container library that manages the access and lifetime of registered dependencies.  
 
 ## Table of Contents
 - [Pre-requisites](#prerequisites)
 - [Quick Start](#quick-start)
   - [TypeScript](#typescript)
   - [JSDOC](#jsdoc)
-- [Example](#example)
 - [Installation](#installation)
 - [Injected Dependencies](#injected-dependencies)
 - [Lazy Reference](#lazy-reference)
 - [Scoped](#scoped)
 - [Singleton](#singleton)
 - [Transient](#transient)
+- [Disposal](#disposal)
+- [Utility](#utility)
 - [Troubleshooting](#troubleshooting)
   - [Circular Dependencies](#circular-dependencies)
 - [Contributing](#contributing)
@@ -32,6 +33,14 @@ try running the following command.
 $ npm -v && node -v
 9.67
 v18.17.1
+```
+
+# Installation
+
+To install and set up the library, run:
+
+```sh
+$ npm install fluxject
 ```
 
 # Quick Start
@@ -119,238 +128,6 @@ class MyService {
 }
 ```
 
-
-# Example
-
-```ts
-import type { InferServiceProvider } from "fluxject";
-import { abstract, fluxject } from "fluxject";
-import { config } from "dotenv";
-import { createConnection } from "my-preferred-database-library";
-
-class SecretsProvider {
-
-    constructor() {
-        console.log(`Created SecretsProvider`);
-        config();
-        this.connectionString = process.env.CONNECTION_STRING;
-        this.businessLogicUrl = process.env.BUSINESS_LOGIC_URL;
-    }
-}
-
-interface ILogger {
-    debug: (...args: any) => void;
-}
-
-class Logger implements ILogger {
-    #businessLogic;
-
-    constructor({ businessLogic }: InferServiceProvider<typeof container, "logger">) {
-        console.log(`Created Logger`);
-        this.#businessLogic = businessLogic;
-    }
-
-    debug(...args: any) {
-        console.log(`DEBUG:`, ...args);
-    }
-
-    submitTicket(err: Error) {
-        await this.#businessLogic.sendTicket({
-            title: err.name,
-            message: err.message,
-            stack: err.stack
-        });
-    }
-
-}
-
-class DatabaseProvider {
-    #log;
-    #databasePromise;
-    
-    constructor({ logger, secrets }: InferServiceProvider<typeof container, "database">) {
-        console.log(`Created DatabaseProvider`);
-        this.#databasePromise = createConnection(secrets.connectionString);
-        this.#log = logger;
-    }
-
-    async getUserById(id: string): User {
-        console.log(`getUserById(${id}) called`);
-        const database = await this.#databasePromise;
-
-        try {
-            const results = await database.exec(`SELECT * FROM User WHERE id = ?`, [id]);
-    
-            return results[0] as User;
-        }
-        catch(err) {
-            this.#log.debug(err);
-            return undefined;
-        }
-    }
-
-    async [Symbol.asyncDispose]() {
-        console.log(`Disposing of DatabaseProvider`);
-        const database = await this.#databasePromise;
-
-        await database.close();
-        console.log(`Disposed DatabaseProvider`);
-    }
-}
-
-interface Ticket {
-    title: string;
-    message: string;
-    stack?: string;
-}
-
-class BusinessLogicAPI {
-    #baseUrl;
-    #logger;
-
-    constructor({ logger, secrets }: InferServiceProvider<typeof container, "businessLogic">) {
-        console.log(`Created BusinessLogicAPI`);
-        this.#baseUrl = secrets.businessLogicUrl;
-        this.#logger = logger;
-    }
-
-    async healthz(): boolean {
-        console.log(`healthz() called`);
-        try {
-            const res = await fetch(`${this.#baseUrl}/healthz`);
-            return res.ok;
-        }
-        catch(err) {
-            return false;
-        }
-    }
-
-    async sendTicket(ticket: Ticket) {
-        try {
-            const res = await fetch(`${this.#baseUrl}/tickets`, {
-                method: 'POST',
-                body: JSON.stringify(ticket)
-            });
-            return res.ok;
-        }
-        catch(err) {
-            // Careful: if we try to call `this.#log.sendTicket()` here, it would cause a "CircularDependencyError"
-            return false;
-        }
-    }
-
-    async [Symbol.asyncDispose]() {
-        console.log(`Asynchronously disposing of transient BusinessLogicAPI`);
-    }
-
-}
-
-interface User {
-    id: string;
-    firstName: string;
-    lastName: string;
-}
-
-interface IClient {
-    user?: User;
-}
-
-class Client implements IClient {
-    user?: User;
-
-    #businessLogic;
-    #database;
-    #log;
-
-    constructor({ businessLogic, database, logger }: InferServiceProvider<typeof container, "client">) {
-        console.log(`Created Client`);
-        this.#businessLogic = businessLogic;
-        this.#database = database;
-        this.#log = logger;
-    }
-
-    async setUserId(id: string) {
-        console.log(`Setting User ID: ${id}`);
-        this.user = await this.#database.getUser(id);
-    }
-
-    [Symbol.dispose]() {
-        console.log(`Synchronously disposing of Client`);
-    }
-}
-
-
-const container = fluxject()
-    .register(m => m.singleton({
-        secrets: Secrets,
-        logger: abstract<ILogger>(Logger) // `abstract` does nothing but change the type of `logger` to be an `ILogger` instead of `Logger`.
-    }))
-    .register(m => m.transient({
-        businessLogic: BusinessLogic
-    }))
-    .register(m => m.scoped({
-        client: abstract<IClient>(Client)
-    }));
-
-const provider = container.prepare();
-
-provider.logger.debug(`Service container ready.`);
-if(!(await provider.businessLogic.healthz())) {
-    throw new Error("Could not connect to Business Logic!");
-}
-console.log(`Connection to Business Logic was successful.`);
-
-const scope = provider.createScope();
-console.log(`Created ScopedServiceProvider`);
-
-await scope.client.setUserId("1");
-
-console.log(scope.client.user);
-
-if(await provider.businessLogic.healthz()) {
-    console.log(`Showing that transients are one-time request use only`);
-}
-
-// Since there is an existing `async [Symbol.asyncDispose]()` method declared on at least one `Singleton` service, 
-//   then this method's return type is inferred to be of `Promise<void>`
-await provider.dispose();
-
-// Calling `.dispose()` on the host provider will automatically dispose of all derived scoped providers that was returned from the host's `createScope()` function.
-//   Alternatively, you can call the `.dispose()` function on just the scoped provider, if you only want to dispose of that scope.
-await scope.dispose(); // although, since we called `.dispose()` on the host provider above, this would do nothing.
-```
-
-The above program would print out the following to your terminal (assuming no errors):
-
-```
-Created Logger
-DEBUG: Service container ready.
-Created SecretsProvider
-Created BusinessLogicAPI
-Asynchronously disposing of BusinessLogicAPI
-Connection to Business Logic was successful.
-Created ScopedServiceProvider
-Created User
-Setting User Id: 1
-Created Database
-getUserById(1) called
-Client { id: 1, firstName: "John", lastName: "Doe" }
-Created BusinessLogicAPI
-Asynchronously disposing of BusinessLogicAPI
-Showing that transients are one-time request use only
-Synchronously disposing of Client
-Disposing of DatabaseProvider
-Disposed DatabaseProvider
-```
-
-# Installation
-
-To install and set up the library, run:
-
-```sh
-$ npm install fluxject
-```
-
 # Injected Dependencies
 
 Dependencies that are injected into each service (the first argument that is passed into a constructor) can have the type inferred using the `InferServiceProvider` type.  
@@ -383,6 +160,28 @@ The `.dispose()` function on the host provider can also be called to dispose of 
 
 The inferred service provider using the provided `InferServiceProvider` type will yield an interface that contains all of your services (not including itself) (as `LazyReference`s) that you have registered with its appropriate instance. 
 
+A scoped service can be added using one of the following methods:
+  - `.addScope<TService, TServiceName>(TServiceName, TService)`: Will add a single scoped dependency, given the `TServiceName` and `TService, under the disposal priority determined by fluxject.
+  - `.addScopes<TServices>(TServices)`: Will add multiple scoped dependencies given an object, `TServices`, under the disposal priority determined by fluxject.
+
+## Usage
+
+```ts
+interface IDatabaseProvider {
+
+}
+class MyDatabase implements IDatabaseProvider {};
+
+// Passing a generic parameter is optional, otherwise it is inferred by the type of the second parameter.
+//   This is true for all `Container` methods.
+const container = fluxject()
+    .addScope<IDatabaseProvider>("database", MyDatabase)
+    .addScopes({
+        redis: Redis,
+        files: FileManager
+    })
+```
+
 # Singleton
 
 Singleton services are expected to last for the entire life of the application.
@@ -390,6 +189,28 @@ Singleton services are expected to last for the entire life of the application.
 You can expect a singleton service to maintain all of its state, however modified, starting from the invocation of `.prepare()`, all the way until the `.dispose()` function is called.
 
 The inferred service provider using the provided `InferServiceProvider` type will yield an interface that only contains the services that have been registered as `Transient` or `Singleton` (not including itself) (as `LazyReference`s) that you have registered with its appropriate instance.
+
+A singleton service can be added using one of the following methods:
+  - `.addSingleton<TService, TServiceName>(TServiceName, TService)`: Will add a single singleton dependency, given the `TServiceName` and `TService, under the disposal priority determined by fluxject.
+  - `.addSingletons<TServices>(TServices)`: Will add multiple singleton dependencies given an object, `TServices`, under the disposal priority determined by fluxject.
+
+## Usage
+
+```ts
+interface IDatabaseProvider {
+
+}
+class MyDatabase implements IDatabaseProvider {};
+
+// Passing a generic parameter is optional, otherwise it is inferred by the type of the second parameter.
+//   This is true for all `Container` methods.
+const container = fluxject()
+    .addSingleton<IDatabaseProvider>("database", MyDatabase)
+    .addSingletons({
+        redis: Redis,
+        files: FileManager
+    })
+```
 
 # Transient
 
@@ -399,6 +220,130 @@ You can expect a transient service to always be in the state that it is in immed
 
 > __CAUTION__  
 > Transient services should be services that are infrequently called. They are important for completing a single request of its instance. If you find the need to declare it as a disposable, then you should consider converting the service into a `Singleton` or `Scoped` service.
+
+A transient service can be added using one of the following methods:
+  - `.addTransient<TService, TServiceName>(TServiceName, TService)`: Will add a single singleton dependency, given the `TServiceName` and `TService, under the disposal priority determined by fluxject.
+  - `.addTransients<TServices>(TServices)`: Will add multiple singleton dependencies given an object, `TServices`, under the disposal priority determined by fluxject.
+
+## Usage
+
+```ts
+interface IDatabaseProvider {
+
+}
+class MyDatabase implements IDatabaseProvider {};
+
+// Passing a generic parameter is optional, otherwise it is inferred by the type of the second parameter.
+//   This is true for all `Container` methods.
+const container = fluxject()
+    .addTransient<IDatabaseProvider>("database", MyDatabase)
+    .addTransients({
+        redis: Redis,
+        files: FileManager
+    })
+```
+
+# Disposal
+
+`Scoped` services are disposed of when the `.dispose()` function on the `ScopedServiceProvider` is invoked. `Scoped` services under that provider will be disposed of in __reverse order of how the dependency was registered__. Additionally, if the `.dispose()` function on the `HostServiceProvider` is invoked, then all `ScopedServiceProvider`s that were derived from the host provider will be disposed of first, then the remaining `Singleton` services.
+
+`Singleton` services are disposed of when the `.dispose()` function on the `HostServiceProvider` is invoked. Their disposal occurs after all derived `ScopedServiceProvider`s have completed their disposal. `Singleton` services under the host provider will be disposed of in __reverse order of how the dependency was registered__.
+
+`Transient` services are an on-demand service, meaning they will be instantiated, utilized, then disposed of immediately after the requested action has been completed.
+
+__Services will only be disposed of if they were instantiated__
+
+## Example
+
+```ts
+class A {
+    [Symbol.dispose]() {
+        console.log("Disposed A");     
+    }
+}
+
+class B {
+    [Symbol.dispose]() {
+        console.log("Disposed B");
+    }
+}
+
+class C {
+    [Symbol.dispose]() {
+        console.log("Disposed C");
+    }
+}
+
+class D {
+    [Symbol.dispose]() {
+        console.log("Disposed D");
+    }
+}
+
+const container = fluxject()
+    .addScope("c", C)
+    .addScope("d", D, { priority: -1 })
+    .addSingleton("a", A)
+    .addTransient("b", B)
+
+const provider1 = container.prepare();
+
+// services must be instantiated, so therefore, this `.dispose()` invocation does nothing.
+console.log("provider1 dispose");
+provider1.dispose();
+
+const provider2 = container.prepare();
+const scope1 = provider2.createScope();
+provider2.a.toString(); // done so `A` gets instantiated.
+scope1.c.toString(); // done so `C` gets instantiated.
+
+console.log("scope1 dispose");
+scope1.dispose();
+
+const scope2 = provider2.createScope();
+scope2.c.toString(); // done so `C` gets instantiated.
+scope2.d.toString(); // done so 'D' gets instantiated.
+
+console.log(`transient de-reference`);
+provider2.b.toString();
+
+console.log("provider2 dispose");
+provider2.dispose();
+```
+
+The above program will print the following:
+
+```
+provider1 dispose
+scope1 dispose
+Disposed C
+transient de-reference
+Disposed B
+provider2 dispose
+Disposed D
+Disposed C
+Disposed A
+```
+
+If the `{ priority: -1 }` is removed from the declared dependency, `D`, then the output would look like the following:
+
+```
+provider1 dispose
+scope1 dispose
+Disposed C
+transient de-reference
+Disposed B
+provider2 dispose
+Disposed C # notice C got disposed before D
+Disposed D
+Disposed A # singletons always dispose last.
+```
+
+# Utility
+
+Fluxject offers the following utility functions under the following `fluxject/util` sub-directive.
+  - `extract<T>(T)`: Extracts the actual instance (and instantiates if necessary) from the given service, removing the underlying `LazyReference` proxy. __Use this function with care, as it is an experimental feature and may lead to unpredictable results__
+  - `isExtracted(object)`: Returns true if the service has been extracted from a `LazyReference`. (In actuality, it only checks if `object` is an `instanceof` `LazyReference`.)
 
 # Troubleshooting 
 

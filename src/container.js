@@ -35,10 +35,7 @@ export class Container {
 
     /**
      * Register a new set of dependencies to the container.  
-     * 
-     * __If order of disposal is important, try using the `addSingleton`, `addScope`, or `addTransient` methods.__  
-     * 
-     * __NOTE: Although, this method is not deprecated now, it is expected to be deprecated in the future.__
+     * @deprecated Use the `addSingleton`, `addScope`, or `addTransient` methods instead.
      * @template {Record<string, Types.Registration<any, any>>} TNewRegistrations
      * The new registrations as inferred from the return type of the callback.
      * @param {(serviceBuilder: RegistrationBuilder) => TNewRegistrations} callback
@@ -59,10 +56,10 @@ export class Container {
      * Add a singleton to your container, preserving its priority when disposing.  
      * 
      * __Priority of disposal occurs in a reverse-order of the container's registrations. Meaning whatever is registered first will be disposed of last.__
-     * @template {string} TNewRegistrationName
-     * Inferred registration name from the `name` parameter.
      * @template {Types.Instantiator<any>} TFactoryMethod
      * Inferred factory method from the `factoryMethod` parameter.
+     * @template {string} TNewRegistrationName
+     * Inferred registration name from the `name` parameter.
      * @param {TNewRegistrationName extends keyof TRegistrations ? never : TNewRegistrationName} name
      * The name of the registration.
      * @param {TFactoryMethod} factoryMethod
@@ -128,10 +125,10 @@ export class Container {
      * __All services registered under this one method call will have the same priority__
      * 
      * __Priority of disposal occurs in a reverse-order of the container's registrations. Meaning whatever is registered first will be disposed of last.__
-     * @template {string} TNewRegistrationName
-     * Inferred registration name from the `name` parameter.
      * @template {Types.Instantiator<any>} TFactoryMethod
      * Inferred factory method from the `factoryMethod` parameter.
+     * @template {string} TNewRegistrationName
+     * Inferred registration name from the `name` parameter.
      * @param {TNewRegistrationName extends keyof TRegistrations ? never : TNewRegistrationName} name
      * The name of the registration.
      * @param {TFactoryMethod} factoryMethod
@@ -195,10 +192,10 @@ export class Container {
      * Add a transient service to your container.  
      * 
      * __Priority is not preserved under a transient service, as a transient service is disposed of on demand.__
-     * @template {string} TNewRegistrationName
-     * Inferred registration name from the `name` parameter.
      * @template {Types.Instantiator<any>} TFactoryMethod
      * Inferred factory method from the `factoryMethod` parameter.
+     * @template {string} TNewRegistrationName
+     * Inferred registration name from the `name` parameter.
      * @param {TNewRegistrationName extends keyof TRegistrations ? never : TNewRegistrationName} name
      * The name of the registration.
      * @param {TFactoryMethod} factoryMethod
